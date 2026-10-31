@@ -1,0 +1,11 @@
+# Rust build artifacts
+/target/
+/color-worker/target/
+
+# IDE
+.vscode/
+.idea/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
