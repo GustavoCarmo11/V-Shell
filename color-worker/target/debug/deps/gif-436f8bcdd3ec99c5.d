@@ -1,0 +1,12 @@
+/home/gustavo/Projects/caelestia-rs/color-worker/target/debug/deps/gif-436f8bcdd3ec99c5.d: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/common.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/encoder.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/reader/mod.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/reader/converter.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/reader/decoder.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/traits.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/../README.md
+
+/home/gustavo/Projects/caelestia-rs/color-worker/target/debug/deps/libgif-436f8bcdd3ec99c5.rmeta: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/common.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/encoder.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/reader/mod.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/reader/converter.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/reader/decoder.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/traits.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/../README.md
+
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/lib.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/common.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/encoder.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/reader/mod.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/reader/converter.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/reader/decoder.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/traits.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/gif-0.14.2/src/../README.md:

@@ -1,0 +1,11 @@
+/home/gustavo/Projects/caelestia-rs/target/release/deps/wayland_sys-8b57fd0500b6b6ba.d: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/common.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/client.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/server.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/egl.rs
+
+/home/gustavo/Projects/caelestia-rs/target/release/deps/libwayland_sys-8b57fd0500b6b6ba.rlib: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/common.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/client.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/server.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/egl.rs
+
+/home/gustavo/Projects/caelestia-rs/target/release/deps/libwayland_sys-8b57fd0500b6b6ba.rmeta: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/common.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/client.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/server.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/egl.rs
+
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/lib.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/common.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/client.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/server.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/egl.rs:

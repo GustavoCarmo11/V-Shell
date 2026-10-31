@@ -1,0 +1,11 @@
+/home/gustavo/Projects/caelestia-rs/color-worker/target/debug/deps/arrayvec-83673bbf79a2d7af.d: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/arrayvec_impl.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/arrayvec.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/array_string.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/char.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/errors.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/utils.rs
+
+/home/gustavo/Projects/caelestia-rs/color-worker/target/debug/deps/libarrayvec-83673bbf79a2d7af.rmeta: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/arrayvec_impl.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/arrayvec.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/array_string.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/char.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/errors.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/utils.rs
+
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/lib.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/arrayvec_impl.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/arrayvec.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/array_string.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/char.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/errors.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arrayvec-0.7.8/src/utils.rs:

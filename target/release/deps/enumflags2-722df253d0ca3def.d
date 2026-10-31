@@ -1,0 +1,11 @@
+/home/gustavo/Projects/caelestia-rs/target/release/deps/enumflags2-722df253d0ca3def.d: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/formatting.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/fallible.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/iter.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/const_api.rs
+
+/home/gustavo/Projects/caelestia-rs/target/release/deps/libenumflags2-722df253d0ca3def.rlib: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/formatting.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/fallible.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/iter.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/const_api.rs
+
+/home/gustavo/Projects/caelestia-rs/target/release/deps/libenumflags2-722df253d0ca3def.rmeta: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/formatting.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/fallible.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/iter.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/const_api.rs
+
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/lib.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/formatting.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/fallible.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/iter.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/enumflags2-0.7.12/src/const_api.rs:

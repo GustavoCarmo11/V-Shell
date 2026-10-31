@@ -1,0 +1,11 @@
+/home/gustavo/Projects/caelestia-rs/target/release/deps/async_process-36e53ccbc971c72a.d: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/unix.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/mod.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/wait.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/signal.rs
+
+/home/gustavo/Projects/caelestia-rs/target/release/deps/libasync_process-36e53ccbc971c72a.rlib: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/unix.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/mod.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/wait.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/signal.rs
+
+/home/gustavo/Projects/caelestia-rs/target/release/deps/libasync_process-36e53ccbc971c72a.rmeta: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/unix.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/mod.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/wait.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/signal.rs
+
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/lib.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/unix.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/mod.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/wait.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-process-2.5.0/src/reaper/signal.rs:

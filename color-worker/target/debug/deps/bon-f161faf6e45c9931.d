@@ -1,0 +1,12 @@
+/home/gustavo/Projects/caelestia-rs/color-worker/target/debug/deps/bon-f161faf6e45c9931.d: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/collections.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/mod.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/ide.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/better_errors.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/cfg_eval.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/builder_state.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/../README.md
+
+/home/gustavo/Projects/caelestia-rs/color-worker/target/debug/deps/libbon-f161faf6e45c9931.rmeta: /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/lib.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/collections.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/mod.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/ide.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/better_errors.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/cfg_eval.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/builder_state.rs /home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/../README.md
+
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/lib.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/collections.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/mod.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/ide.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/better_errors.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/__/cfg_eval.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/builder_state.rs:
+/home/gustavo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bon-3.10.3/src/../README.md:
