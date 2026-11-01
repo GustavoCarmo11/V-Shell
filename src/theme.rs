@@ -2,40 +2,64 @@ use std::{env, fs, path::PathBuf, time::Duration};
 
 use amane::{Animation, Color, Easing, Service};
 
+// --------------------------------------------------
+// THEME MODE
+// --------------------------------------------------
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeMode {
     Dark,
     Light,
 }
 
-// Snapshot das cores utilizado pelos componentes.
+// --------------------------------------------------
+// THEME COLORS
+// --------------------------------------------------
+
 #[derive(Clone, Copy)]
 pub struct ThemeColors {
     pub mode: ThemeMode,
 
+    // Surfaces
     pub bar_surface: Color,
     pub button_surface: Color,
     pub active_surface: Color,
 
+    // Active workspace content
+    pub active_text: Color,
+
+    // General content
     pub accent: Color,
     pub text: Color,
     pub muted: Color,
     pub divider: Color,
 }
 
-// Serviço que mantém e anima a paleta.
+// --------------------------------------------------
+// THEME SERVICE
+// --------------------------------------------------
+
 pub struct Theme {
     mode: ThemeMode,
 
+    // Surfaces
     bar_surface: Animation<Color>,
     button_surface: Animation<Color>,
     active_surface: Animation<Color>,
 
+    // Active workspace
+    active_text: Animation<Color>,
+
+    // General content
     accent: Animation<Color>,
     text: Animation<Color>,
     muted: Animation<Color>,
     divider: Animation<Color>,
 }
+
+// --------------------------------------------------
+// ANIMATION CONFIGURATION
+// --------------------------------------------------
 
 const MODE_TRANSITION_DURATION: Duration = Duration::from_millis(300);
 
@@ -56,6 +80,10 @@ fn retarget_color(animation: &mut Animation<Color>, target: Color, duration: Dur
 
     animation.to(target);
 }
+
+// --------------------------------------------------
+// THEME COLORS IMPLEMENTATION
+// --------------------------------------------------
 
 impl ThemeColors {
     pub fn load(mode: ThemeMode) -> Self {
@@ -89,6 +117,13 @@ impl ThemeColors {
                 255,
             ),
 
+            active_text: palette_color(
+                &contents,
+                &key("on_primary_container"),
+                fallback.active_text,
+                255,
+            ),
+
             accent: palette_color(&contents, &key("primary"), fallback.accent, 255),
 
             text: palette_color(&contents, &key("on_surface"), fallback.text, 255),
@@ -99,13 +134,21 @@ impl ThemeColors {
         }
     }
 
+    // --------------------------------------------------
+    // FALLBACK PALETTES
+    // --------------------------------------------------
+
     fn fallback(mode: ThemeMode) -> Self {
         match mode {
             ThemeMode::Dark => Self {
                 mode,
+
                 bar_surface: Color::rgba(24, 24, 37, 190),
                 button_surface: Color::rgb(49, 50, 68),
                 active_surface: Color::rgb(69, 71, 90),
+
+                active_text: Color::rgb(255, 219, 213),
+
                 accent: Color::rgb(137, 180, 250),
                 text: Color::rgb(205, 214, 244),
                 muted: Color::rgb(166, 173, 200),
@@ -114,9 +157,13 @@ impl ThemeColors {
 
             ThemeMode::Light => Self {
                 mode,
+
                 bar_surface: Color::rgba(239, 241, 245, 190),
                 button_surface: Color::rgb(220, 224, 232),
                 active_surface: Color::rgb(204, 208, 218),
+
+                active_text: Color::rgb(96, 43, 34),
+
                 accent: Color::rgb(30, 102, 245),
                 text: Color::rgb(76, 79, 105),
                 muted: Color::rgb(108, 111, 133),
@@ -126,10 +173,76 @@ impl ThemeColors {
     }
 }
 
+// --------------------------------------------------
+// THEME SERVICE METHODS
+// --------------------------------------------------
+
 impl Theme {
+    // Retorna a paleta atual com valores interpolados.
+    pub fn snapshot() -> ThemeColors {
+        let theme = Self::read();
+
+        ThemeColors {
+            mode: theme.mode,
+
+            bar_surface: theme.bar_surface.value(),
+            button_surface: theme.button_surface.value(),
+            active_surface: theme.active_surface.value(),
+
+            active_text: theme.active_text.value(),
+
+            accent: theme.accent.value(),
+            text: theme.text.value(),
+            muted: theme.muted.value(),
+            divider: theme.divider.value(),
+        }
+    }
+
+    // Atualiza os destinos de todas as animações.
+    fn animate_to(&mut self, colors: ThemeColors, duration: Duration) {
+        retarget_color(&mut self.bar_surface, colors.bar_surface, duration);
+
+        retarget_color(&mut self.button_surface, colors.button_surface, duration);
+
+        retarget_color(&mut self.active_surface, colors.active_surface, duration);
+
+        retarget_color(&mut self.active_text, colors.active_text, duration);
+
+        retarget_color(&mut self.accent, colors.accent, duration);
+
+        retarget_color(&mut self.text, colors.text, duration);
+
+        retarget_color(&mut self.muted, colors.muted, duration);
+
+        retarget_color(&mut self.divider, colors.divider, duration);
+    }
+
+    // --------------------------------------------------
+    // LIGHT / DARK TOGGLE
+    // --------------------------------------------------
+
+    pub fn toggle() {
+        let next_mode = match Self::read().mode {
+            ThemeMode::Dark => ThemeMode::Light,
+            ThemeMode::Light => ThemeMode::Dark,
+        };
+
+        let colors = ThemeColors::load(next_mode);
+
+        let mut theme = Self::write();
+
+        theme.mode = next_mode;
+
+        theme.animate_to(colors, MODE_TRANSITION_DURATION);
+
+        println!("Theme changed to {:?}", next_mode);
+    }
+
+    // --------------------------------------------------
+    // WALLPAPER THEME RELOAD
+    // --------------------------------------------------
+
     pub fn reload_for_wallpaper() {
-        // Utiliza o modo detectado pelo worker.
-        // Se não houver informação, preserva o modo atual.
         let next_mode = detected_wallpaper_mode().unwrap_or_else(|| Self::read().mode);
 
         let colors = ThemeColors::load(next_mode);
@@ -142,65 +255,11 @@ impl Theme {
 
         println!("Wallpaper theme detected: {:?}", next_mode);
     }
-    // Obtém os valores interpolados para desenhar a interface.
-    pub fn snapshot() -> ThemeColors {
-        let theme = Self::read();
-
-        ThemeColors {
-            mode: theme.mode,
-
-            bar_surface: theme.bar_surface.value(),
-            button_surface: theme.button_surface.value(),
-            active_surface: theme.active_surface.value(),
-
-            accent: theme.accent.value(),
-            text: theme.text.value(),
-            muted: theme.muted.value(),
-            divider: theme.divider.value(),
-        }
-    }
-
-    // Atualiza os destinos das animações.
-    fn animate_to(&mut self, colors: ThemeColors, duration: Duration) {
-        retarget_color(&mut self.bar_surface, colors.bar_surface, duration);
-        retarget_color(&mut self.button_surface, colors.button_surface, duration);
-        retarget_color(&mut self.active_surface, colors.active_surface, duration);
-
-        retarget_color(&mut self.accent, colors.accent, duration);
-        retarget_color(&mut self.text, colors.text, duration);
-        retarget_color(&mut self.muted, colors.muted, duration);
-        retarget_color(&mut self.divider, colors.divider, duration);
-    }
-
-    // Alterna entre Dark e Light.
-    pub fn toggle() {
-        let next_mode = match Self::read().mode {
-            ThemeMode::Dark => ThemeMode::Light,
-            ThemeMode::Light => ThemeMode::Dark,
-        };
-
-        let colors = ThemeColors::load(next_mode);
-
-        let mut theme = Self::write();
-
-        theme.mode = next_mode;
-        theme.animate_to(colors, MODE_TRANSITION_DURATION);
-
-        println!("Theme changed to {:?}", next_mode);
-    }
-
-    // Recarrega a paleta após trocar o wallpaper.
-    pub fn reload() {
-        let mode = Self::read().mode;
-        let colors = ThemeColors::load(mode);
-
-        let mut theme = Self::write();
-
-        theme.animate_to(colors, WALLPAPER_TRANSITION_DURATION);
-
-        println!("Theme palette reloaded");
-    }
 }
+
+// --------------------------------------------------
+// SERVICE INITIALIZATION
+// --------------------------------------------------
 
 impl Service for Theme {
     fn new() -> Self {
@@ -215,6 +274,8 @@ impl Service for Theme {
             button_surface: animated_color(colors.button_surface),
             active_surface: animated_color(colors.active_surface),
 
+            active_text: animated_color(colors.active_text),
+
             accent: animated_color(colors.accent),
             text: animated_color(colors.text),
             muted: animated_color(colors.muted),
@@ -226,7 +287,7 @@ impl Service for Theme {
 }
 
 // --------------------------------------------------
-// PALETTE HELPERS
+// PALETTE FILE
 // --------------------------------------------------
 
 fn palette_path() -> PathBuf {
@@ -237,6 +298,32 @@ fn palette_path() -> PathBuf {
 
     base.join("caelestia-rs").join("palette.txt")
 }
+
+// --------------------------------------------------
+// WALLPAPER MODE DETECTION
+// --------------------------------------------------
+
+fn detected_wallpaper_mode() -> Option<ThemeMode> {
+    let contents = fs::read_to_string(palette_path()).ok()?;
+
+    contents.lines().find_map(|line| {
+        let (key, value) = line.split_once('=')?;
+
+        if key.trim() != "suggested_mode" {
+            return None;
+        }
+
+        match value.trim() {
+            "light" => Some(ThemeMode::Light),
+            "dark" => Some(ThemeMode::Dark),
+            _ => None,
+        }
+    })
+}
+
+// --------------------------------------------------
+// COLOR PARSING
+// --------------------------------------------------
 
 fn palette_color(contents: &str, key: &str, fallback: Color, alpha: u8) -> Color {
     let value = contents.lines().find_map(|line| {
@@ -266,21 +353,4 @@ fn parse_hex(value: &str, alpha: u8) -> Option<Color> {
     let blue = u8::from_str_radix(&hex[4..6], 16).ok()?;
 
     Some(Color::rgba(red, green, blue, alpha))
-}
-fn detected_wallpaper_mode() -> Option<ThemeMode> {
-    let contents = fs::read_to_string(palette_path()).ok()?;
-
-    contents.lines().find_map(|line| {
-        let (key, value) = line.split_once('=')?;
-
-        if key.trim() != "suggested_mode" {
-            return None;
-        }
-
-        match value.trim() {
-            "light" => Some(ThemeMode::Light),
-            "dark" => Some(ThemeMode::Dark),
-            _ => None,
-        }
-    })
 }

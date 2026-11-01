@@ -166,7 +166,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     let selected_seed = candidates.iter().copied().find(|color| {
         let hct = Hct::from_argb(*color);
 
-        hct.chroma() >= 15.0 && (20.0..=95.0).contains(&hct.tone())
+        hct.chroma() >= 15.0 && (5.0..=95.0).contains(&hct.tone())
     });
 
     // Escolhe a seed e a variante.

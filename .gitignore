@@ -9,3 +9,10 @@
 # Sistema operacional
 .DS_Store
 Thumbs.db
+
+# Manifestos locais gerados pelo Amane (contêm caminhos absolutos)
+/Cargo.toml
+/Cargo.lock
+
+# Backups locais
+*.rs.bak

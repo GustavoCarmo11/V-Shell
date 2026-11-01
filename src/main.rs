@@ -1,14 +1,14 @@
 mod theme;
 mod wallpaper;
 
-use wallpaper::WallpaperService;
-
 use amane::{
-    App, Center, Column, Full, Horizontal, Image, Layer, LayerWindow, Margin, Monitor, Parent,
-    Pointer, Rectangle, Service, Stack, Text, Vertical, Widget, Workspace, Workspaces, Zone,
+    App, Center, Color, Column, Full, Horizontal, Image, Layer, LayerWindow, Margin, Monitor,
+    Parent, Pointer, Rectangle, Service, Stack, Text, Vertical, Widget, Workspace, Workspaces,
+    Zone,
 };
 
 use theme::{Theme, ThemeColors, ThemeMode};
+use wallpaper::WallpaperService;
 
 // --------------------------------------------------
 // MAIN
@@ -16,6 +16,7 @@ use theme::{Theme, ThemeColors, ThemeMode};
 
 fn main() {
     App::new()
+        .font("Rubik")
         .window_per_monitor(background)
         .window_per_monitor(drawers)
         .window_per_monitor(bar)
@@ -31,7 +32,7 @@ fn background(_monitor: &Monitor) -> LayerWindow {
 
     let mut layers: Vec<Box<dyn Widget>> = Vec::new();
 
-    // Imagem anterior: desaparece gradualmente.
+    // Wallpaper anterior.
     if let Some(path) = previous {
         let path = path.to_string_lossy().into_owned();
 
@@ -44,7 +45,7 @@ fn background(_monitor: &Monitor) -> LayerWindow {
         ));
     }
 
-    // Imagem nova: aparece gradualmente.
+    // Wallpaper atual.
     if let Some(path) = current {
         let path = path.to_string_lossy().into_owned();
 
@@ -57,7 +58,7 @@ fn background(_monitor: &Monitor) -> LayerWindow {
         ));
     }
 
-    // Fallback caso ainda não exista wallpaper.
+    // Superfície vazia caso não exista wallpaper.
     if layers.is_empty() {
         layers.push(Box::new(Rectangle::new().width(Parent).height(Parent)));
     }
@@ -91,41 +92,72 @@ fn drawers(_monitor: &Monitor) -> LayerWindow {
 // BAR
 // --------------------------------------------------
 
-fn bar(monitor: &Monitor) -> LayerWindow {
-    // Copiamos a paleta para não manter o lock durante
-    // a construção dos componentes.
+fn bar(_monitor: &Monitor) -> LayerWindow {
+    // Snapshot das cores animadas.
     let theme = Theme::snapshot();
 
     let mut buttons: Vec<Box<dyn Widget>> = Vec::new();
 
+    // Home.
+    buttons.push(Box::new(home_button(theme)));
+
     buttons.push(Box::new(divider(theme)));
 
-    // Troca de wallpaper.
-    buttons.push(Box::new(wallpaper_button(theme)));
+    // Workspaces do monitor atual.
 
-    // Alternância de tema.
-    buttons.push(Box::new(theme_button(theme)));
-
-    // Workspaces reais do Hyprland.
+    // Workspaces do Hyprland.
     let workspaces = Workspaces::read();
+    let workspace_list = workspaces.list();
 
-    for workspace in workspaces.list() {
-        if workspace.output() == Some(monitor.name.as_str()) {
-            buttons.push(Box::new(workspace_button(workspace, theme)));
-        }
+    println!(
+        "[caelestia-rs] Workspaces recebidos: {}",
+        workspace_list.len()
+    );
+
+    let mut workspace_count = 0usize;
+
+    // Temporariamente exibimos todos os workspaces,
+    // sem filtrar pelo monitor.
+    for workspace in workspace_list.iter() {
+        println!(
+            "[caelestia-rs] Workspace {} | output={:?} | active={}",
+            workspace.index(),
+            workspace.output(),
+            workspace.active()
+        );
+
+        workspace_count += 1;
+
+        buttons.push(Box::new(workspace_button(workspace, theme)));
     }
 
+    println!(
+        "[caelestia-rs] Workspaces adicionados à barra: {}",
+        workspace_count
+    );
+
     buttons.push(Box::new(divider(theme)));
 
-    // Alternância de tema.
+    // Wallpaper.
+    buttons.push(Box::new(wallpaper_button(theme)));
+
+    // Light / Dark.
     buttons.push(Box::new(theme_button(theme)));
 
-    buttons.push(Box::new(bar_button("A", false, theme)));
-    buttons.push(Box::new(bar_button("P", false, theme)));
+    buttons.push(Box::new(divider(theme)));
+
+    // Launcher.
+    buttons.push(Box::new(launcher_button(theme)));
+
+    // Sessão.
+    buttons.push(Box::new(session_button(theme)));
+
+    // A altura acompanha a quantidade de workspaces.
+    let bar_height = (278.0 + workspace_count as f32 * 49.0).clamp(360.0, 760.0);
 
     LayerWindow::new()
         .width(68.0)
-        .height(390.0)
+        .height(bar_height)
         .anchor_horizontal(Horizontal::Left)
         .anchor_vertical(Vertical::Middle)
         .margin(Margin {
@@ -143,17 +175,47 @@ fn bar(monitor: &Monitor) -> LayerWindow {
                 .height(Parent)
                 .radius(28.0)
                 .fill(theme.bar_surface)
-                .padding(10.0)
+                .padding(8.0)
                 .align_child(Center, Center)
                 .child(
                     Column::new(buttons)
                         .width(Parent)
                         .height(Parent)
-                        .gap(8.0)
+                        .gap(7.0)
                         .align(Center)
                         .justify(Center),
                 ),
         )
+}
+
+// --------------------------------------------------
+// ICON BUTTON
+// --------------------------------------------------
+
+fn icon_button(icon: &'static str, background: Color, foreground: Color) -> Rectangle {
+    Rectangle::new()
+        .width(42.0)
+        .height(42.0)
+        .radius(14.0)
+        .fill(background)
+        .cursor(Pointer)
+        .align_child(Center, Center)
+        .child(
+            Text::new(icon)
+                .font("Material Symbols Rounded")
+                .size(24.0)
+                .color(foreground),
+        )
+}
+
+// --------------------------------------------------
+// HOME
+// --------------------------------------------------
+
+fn home_button(theme: ThemeColors) -> Rectangle {
+    icon_button("\u{e9b2}", theme.button_surface, theme.muted).on_click(|_| {
+        println!("caelestia-rs: home");
+    })
 }
 
 // --------------------------------------------------
@@ -169,7 +231,11 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors) -> Rectangle {
         theme.button_surface
     };
 
-    let foreground = if active { theme.accent } else { theme.text };
+    let foreground = if active {
+        theme.active_text
+    } else {
+        theme.text
+    };
 
     let id = workspace.id();
 
@@ -180,84 +246,71 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors) -> Rectangle {
 
     Rectangle::new()
         .width(42.0)
-        .height(38.0)
-        .radius(13.0)
+        .height(42.0)
+        .radius(14.0)
         .fill(background)
         .cursor(Pointer)
         .on_click(move |_| {
             Workspaces::focus(id);
         })
         .align_child(Center, Center)
-        .child(Text::new(&label).size(14.0).color(foreground))
+        .child(Text::new(label).size(15.0).color(foreground))
 }
 
 // --------------------------------------------------
-// THEME BUTTON
+// WALLPAPER
 // --------------------------------------------------
-
-fn theme_button(theme: ThemeColors) -> Rectangle {
-    let label = match theme.mode {
-        ThemeMode::Dark => "L",
-        ThemeMode::Light => "D",
-    };
-
-    Rectangle::new()
-        .width(42.0)
-        .height(38.0)
-        .radius(13.0)
-        .fill(theme.button_surface)
-        .cursor(Pointer)
-        .on_click(|_| {
-            Theme::toggle();
-        })
-        .align_child(Center, Center)
-        .child(Text::new(label).size(14.0).color(theme.accent))
-}
 
 fn wallpaper_button(theme: ThemeColors) -> Rectangle {
-    Rectangle::new()
-        .width(42.0)
-        .height(38.0)
-        .radius(13.0)
-        .fill(theme.button_surface)
-        .cursor(Pointer)
-        .on_click(|_| match WallpaperService::next() {
+    icon_button("\u{e1bc}", theme.button_surface, theme.accent).on_click(|_| {
+        match WallpaperService::next() {
             Some(path) => {
-                println!("Wallpaper selecionado: {}", path.display());
+                println!("Wallpaper: {}", path.display());
             }
-
             None => {
                 eprintln!("Nenhum wallpaper disponível.");
             }
-        })
-        .align_child(Center, Center)
-        .child(Text::new("W").size(14.0).color(theme.accent))
+        }
+    })
 }
+
 // --------------------------------------------------
-// COMPONENTS
+// LIGHT / DARK
 // --------------------------------------------------
 
-fn bar_button(label: &'static str, active: bool, theme: ThemeColors) -> Rectangle {
-    let background = if active {
-        theme.active_surface
-    } else {
-        theme.button_surface
+fn theme_button(theme: ThemeColors) -> Rectangle {
+    let icon = match theme.mode {
+        ThemeMode::Dark => "\u{e518}",
+        ThemeMode::Light => "\u{e51c}",
     };
 
-    let foreground = if active { theme.accent } else { theme.text };
-
-    Rectangle::new()
-        .width(42.0)
-        .height(38.0)
-        .radius(13.0)
-        .fill(background)
-        .cursor(Pointer)
-        .on_click(move |_| {
-            println!("caelestia-rs: clicked {label}");
-        })
-        .align_child(Center, Center)
-        .child(Text::new(label).size(14.0).color(foreground))
+    icon_button(icon, theme.button_surface, theme.accent).on_click(|_| {
+        Theme::toggle();
+    })
 }
+
+// --------------------------------------------------
+// LAUNCHER
+// --------------------------------------------------
+
+fn launcher_button(theme: ThemeColors) -> Rectangle {
+    icon_button("\u{e5c3}", theme.button_surface, theme.text).on_click(|_| {
+        println!("caelestia-rs: launcher");
+    })
+}
+// --------------------------------------------------
+// SESSION
+// --------------------------------------------------
+
+fn session_button(theme: ThemeColors) -> Rectangle {
+    icon_button("\u{f8c7}", theme.button_surface, theme.text).on_click(|_| {
+        println!("caelestia-rs: session");
+    })
+}
+
+// --------------------------------------------------
+// DIVIDER
+// --------------------------------------------------
 
 fn divider(theme: ThemeColors) -> Rectangle {
     Rectangle::new().width(26.0).height(1.0).fill(theme.divider)
