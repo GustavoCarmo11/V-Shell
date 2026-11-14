@@ -102,10 +102,6 @@ impl Service for WallpaperService {
 // --------------------------------------------------
 
 impl WallpaperService {
-    pub fn current_path(&self) -> Option<PathBuf> {
-        self.current.clone()
-    }
-
     // --------------------------------------------------
     // CROSSFADE
     // --------------------------------------------------
