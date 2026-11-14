@@ -101,7 +101,7 @@ impl ThemeColors {
         Self {
             mode,
 
-            bar_surface: palette_color(&contents, &key("surface"), fallback.bar_surface, 190),
+            bar_surface: palette_color(&contents, &key("surface"), fallback.bar_surface, 215),
 
             button_surface: palette_color(
                 &contents,
@@ -143,7 +143,7 @@ impl ThemeColors {
             ThemeMode::Dark => Self {
                 mode,
 
-                bar_surface: Color::rgba(24, 24, 37, 190),
+                bar_surface: Color::rgba(24, 24, 37, 215),
                 button_surface: Color::rgb(49, 50, 68),
                 active_surface: Color::rgb(69, 71, 90),
 
@@ -158,7 +158,7 @@ impl ThemeColors {
             ThemeMode::Light => Self {
                 mode,
 
-                bar_surface: Color::rgba(239, 241, 245, 190),
+                bar_surface: Color::rgba(239, 241, 245, 215),
                 button_surface: Color::rgb(220, 224, 232),
                 active_surface: Color::rgb(204, 208, 218),
 

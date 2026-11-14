@@ -1,13 +1,14 @@
 mod drawer;
 mod launcher;
 mod motion;
+mod special_workspace;
 mod theme;
 mod wallpaper;
 
 use amane::{
-    App, Apps, Center, Color, Column, End, Full, Horizontal, Image, InputArea, Keyboard, Layer,
-    LayerWindow, Monitor, Parent, Pointer, Rectangle, Service, Stack, Start, Text, Vertical,
-    Widget, Workspace, Workspaces, Zone,
+    App, Apps, Canvas, Center, Color, Column, End, Full, Horizontal, Image, InputArea, Keyboard,
+    Layer, LayerWindow, Monitor, Parent, Path, Pointer, Rectangle, Service, Shape, SpaceBetween,
+    Stack, Start, Text, Vertical, Widget, Workspace, Workspaces, Zone,
 };
 
 use drawer::{DASHBOARD_HEIGHT, DASHBOARD_WIDTH, DrawerState};
@@ -15,6 +16,7 @@ use launcher::{
     LauncherState, PANEL_BOTTOM_GAP, PANEL_HEIGHT as LAUNCHER_HEIGHT, PANEL_WIDTH as LAUNCHER_WIDTH,
 };
 use motion::{Motion, PanelId};
+use special_workspace::SpecialWorkspace;
 use theme::{Theme, ThemeColors, ThemeMode};
 use wallpaper::WallpaperService;
 
@@ -342,7 +344,7 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         .width(Parent)
         .height(Parent)
         .align_child(Start, Start)
-        .child(rail(theme, monitor.height as f32));
+        .child(rail(theme, monitor.height as f32, &monitor.name));
 
     // The Dashboard shares the same SDF surface and retains its centered top anchor.
     let dashboard_layer = Rectangle::new()
@@ -437,45 +439,69 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
 // RAIL CONTENT
 // --------------------------------------------------
 
-fn rail(theme: ThemeColors, height: f32) -> Rectangle {
-    let mut buttons: Vec<Box<dyn Widget>> = Vec::new();
+fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
+    let special_active = SpecialWorkspace::active_on(output);
+    let mut workspace_buttons: Vec<Box<dyn Widget>> = Vec::new();
 
-    buttons.push(Box::new(dashboard_button(theme)));
-    buttons.push(Box::new(divider(theme)));
+    if special_active {
+        // A visible special workspace replaces the regular workspace list.
+        workspace_buttons.push(Box::new(special_workspace_button(theme)));
+    } else {
+        let workspaces = Workspaces::read();
 
-    buttons.push(Box::new(home_button(theme)));
-    buttons.push(Box::new(divider(theme)));
-
-    let workspaces = Workspaces::read();
-    let workspace_list = workspaces.list();
-
-    for workspace in workspace_list.iter() {
-        buttons.push(Box::new(workspace_button(workspace, theme)));
+        for workspace in workspaces.list().iter() {
+            workspace_buttons.push(Box::new(workspace_button(workspace, theme)));
+        }
     }
 
-    buttons.push(Box::new(divider(theme)));
+    let workspace_group = Column::new(workspace_buttons)
+        .width(Parent)
+        .gap(6.0)
+        .align(Center)
+        .justify(Start);
 
-    buttons.push(Box::new(wallpaper_button(theme)));
-    buttons.push(Box::new(theme_button(theme)));
+    // The central slot is reserved for active-window metadata. Its data source
+    // will be connected later; for now it identifies the future information area.
+    let workspace_section = Column::new(vec![Box::new(workspace_group), Box::new(divider(theme))])
+        .width(Parent)
+        .gap(10.0)
+        .align(Center)
+        .justify(Start);
 
-    buttons.push(Box::new(divider(theme)));
+    let window_section = active_window_area(theme);
 
-    buttons.push(Box::new(launcher_button(theme)));
-    buttons.push(Box::new(session_button(theme)));
+    let bottom_section = Column::new(vec![
+        Box::new(dashboard_button(theme)),
+        Box::new(home_button(theme)),
+        Box::new(divider(theme)),
+        Box::new(wallpaper_button(theme)),
+        Box::new(theme_button(theme)),
+        Box::new(divider(theme)),
+        Box::new(launcher_button(theme)),
+        Box::new(session_button(theme)),
+    ])
+    .width(Parent)
+    .gap(6.0)
+    .align(Center)
+    .justify(End);
 
-    // No background or border here: the fullscreen SDF draws the shared surface.
+    // Workspaces stay at the top, the active-window slot occupies the middle,
+    // and the existing shell actions remain grouped at the bottom.
     Rectangle::new()
         .width(RAIL_WIDTH)
         .height(height)
         .padding(6.0)
         .align_child(Center, Center)
         .child(
-            Column::new(buttons)
-                .width(Parent)
-                .height(Parent)
-                .gap(6.0)
-                .align(Center)
-                .justify(Center),
+            Column::new(vec![
+                Box::new(workspace_section),
+                Box::new(window_section),
+                Box::new(bottom_section),
+            ])
+            .width(Parent)
+            .height(Parent)
+            .align(Center)
+            .justify(SpaceBetween),
         )
 }
 
@@ -611,12 +637,8 @@ fn home_button(theme: ThemeColors) -> Rectangle {
 
 fn workspace_button(workspace: &Workspace, theme: ThemeColors) -> Rectangle {
     let active = workspace.active();
-
-    let background = if active {
-        theme.active_surface
-    } else {
-        theme.button_surface
-    };
+    let occupied = workspace.windows() > 0;
+    let id = workspace.id();
 
     let foreground = if active {
         theme.active_text
@@ -624,24 +646,215 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors) -> Rectangle {
         theme.text
     };
 
-    let id = workspace.id();
-
     let label = workspace
         .name()
         .map(str::to_owned)
         .unwrap_or_else(|| workspace.index().to_string());
 
-    Rectangle::new()
-        .width(38.0)
-        .height(38.0)
-        .radius(13.0)
-        .fill(background)
+    let background = if active {
+        Some((6, theme.active_surface))
+    } else if occupied {
+        Some((4, theme.button_surface))
+    } else {
+        None
+    };
+
+    workspace_indicator(label, foreground, background, false)
         .cursor(Pointer)
         .on_click(move |_| {
             Workspaces::focus(id);
         })
+}
+
+fn special_workspace_button(theme: ThemeColors) -> Rectangle {
+    workspace_indicator(
+        "\u{e838}".to_owned(),
+        theme.active_text,
+        Some((6, theme.active_surface)),
+        true,
+    )
+}
+
+fn workspace_indicator(
+    label: String,
+    foreground: Color,
+    background: Option<(usize, Color)>,
+    is_icon: bool,
+) -> Rectangle {
+    let label = if is_icon {
+        Text::new(label)
+            .font("Material Symbols Rounded")
+            .size(21.0)
+            .color(foreground)
+    } else {
+        Text::new(label).size(14.0).color(foreground)
+    };
+
+    let label_layer = Rectangle::new()
+        .width(Parent)
+        .height(Parent)
         .align_child(Center, Center)
-        .child(Text::new(label).size(14.0).color(foreground))
+        .child(label);
+
+    let mut layers: Vec<Box<dyn Widget>> = Vec::new();
+
+    if let Some((sides, fill)) = background {
+        layers.push(Box::new(cookie_canvas(38.0, sides, fill)));
+    }
+
+    layers.push(Box::new(label_layer));
+
+    Rectangle::new()
+        .width(38.0)
+        .height(38.0)
+        .fill(Color::TRANSPARENT)
+        .child(Stack::new(layers).width(Parent).height(Parent))
+}
+
+// A compact placeholder for future active-window metadata.
+fn active_window_area(theme: ThemeColors) -> Rectangle {
+    Rectangle::new()
+        .width(44.0)
+        .height(76.0)
+        .radius(15.0)
+        .fill(theme.button_surface)
+        .align_child(Center, Center)
+        .child(
+            Column::new(vec![
+                Box::new(
+                    Text::new("\u{e8f4}")
+                        .font("Material Symbols Rounded")
+                        .size(19.0)
+                        .color(theme.muted),
+                ),
+                Box::new(Text::new("Janela").size(9.0).color(theme.muted)),
+                Box::new(Text::new("ativa").size(9.0).color(theme.muted)),
+            ])
+            .align(Center)
+            .justify(Center)
+            .gap(3.0),
+        )
+}
+
+// Material 3's Cookie4Sided and Cookie6Sided are rounded polygons. This helper
+// reproduces their repeated vertices and rounded corners as a small Canvas path.
+fn cookie_canvas(size: f32, sides: usize, fill: Color) -> Canvas {
+    #[derive(Clone, Copy)]
+    struct Vertex {
+        x: f32,
+        y: f32,
+        rounding: f32,
+    }
+
+    let (seeds, repetitions): ([(f32, f32, f32); 2], usize) = match sides {
+        4 => ([(1.237, 1.236, 0.258), (0.500, 0.918, 0.233)], 4),
+        _ => ([(0.723, 0.884, 0.394), (0.500, 1.099, 0.398)], 6),
+    };
+
+    let mut vertices = Vec::with_capacity(repetitions * seeds.len());
+
+    for repetition in 0..repetitions {
+        let angle = repetition as f32 * std::f32::consts::TAU / repetitions as f32;
+        let (sin, cos) = angle.sin_cos();
+
+        for (x, y, rounding) in seeds {
+            let dx = x - 0.5;
+            let dy = y - 0.5;
+
+            vertices.push(Vertex {
+                x: 0.5 + dx * cos - dy * sin,
+                y: 0.5 + dx * sin + dy * cos,
+                rounding,
+            });
+        }
+    }
+
+    let min_x = vertices
+        .iter()
+        .map(|point| point.x)
+        .fold(f32::INFINITY, f32::min);
+    let max_x = vertices
+        .iter()
+        .map(|point| point.x)
+        .fold(f32::NEG_INFINITY, f32::max);
+    let min_y = vertices
+        .iter()
+        .map(|point| point.y)
+        .fold(f32::INFINITY, f32::min);
+    let max_y = vertices
+        .iter()
+        .map(|point| point.y)
+        .fold(f32::NEG_INFINITY, f32::max);
+
+    let available = size - 4.0;
+    let scale = available / (max_x - min_x).max(max_y - min_y);
+    let offset_x = (size - (max_x - min_x) * scale) * 0.5;
+    let offset_y = (size - (max_y - min_y) * scale) * 0.5;
+
+    for point in &mut vertices {
+        point.x = (point.x - min_x) * scale + offset_x;
+        point.y = (point.y - min_y) * scale + offset_y;
+    }
+
+    let mut entries = Vec::with_capacity(vertices.len());
+    let mut exits = Vec::with_capacity(vertices.len());
+
+    for index in 0..vertices.len() {
+        let previous = vertices[(index + vertices.len() - 1) % vertices.len()];
+        let current = vertices[index];
+        let next = vertices[(index + 1) % vertices.len()];
+
+        let to_previous = (previous.x - current.x, previous.y - current.y);
+        let to_next = (next.x - current.x, next.y - current.y);
+        let previous_length =
+            (to_previous.0 * to_previous.0 + to_previous.1 * to_previous.1).sqrt();
+        let next_length = (to_next.0 * to_next.0 + to_next.1 * to_next.1).sqrt();
+
+        let previous_unit = (
+            to_previous.0 / previous_length.max(0.001),
+            to_previous.1 / previous_length.max(0.001),
+        );
+        let next_unit = (
+            to_next.0 / next_length.max(0.001),
+            to_next.1 / next_length.max(0.001),
+        );
+
+        let dot = (previous_unit.0 * next_unit.0 + previous_unit.1 * next_unit.1).clamp(-1.0, 1.0);
+        let interior_half_angle = dot.acos() * 0.5;
+        let tangent = interior_half_angle.tan().max(0.001);
+        let corner_radius = current.rounding * available;
+        let distance = (corner_radius / tangent)
+            .min(previous_length * 0.46)
+            .min(next_length * 0.46);
+
+        entries.push((
+            current.x + previous_unit.0 * distance,
+            current.y + previous_unit.1 * distance,
+        ));
+        exits.push((
+            current.x + next_unit.0 * distance,
+            current.y + next_unit.1 * distance,
+        ));
+    }
+
+    let mut path = Path::new().move_to(entries[0].0, entries[0].1);
+
+    for index in 0..vertices.len() {
+        let current = vertices[index];
+        let exit = exits[index];
+        let next_entry = entries[(index + 1) % vertices.len()];
+
+        path = path
+            .quad_to(current.x, current.y, exit.0, exit.1)
+            .line_to(next_entry.0, next_entry.1);
+    }
+
+    let path = path.close().fill(fill);
+
+    Canvas::new()
+        .width(size)
+        .height(size)
+        .shapes(vec![Box::new(path)])
 }
 
 // --------------------------------------------------
