@@ -124,6 +124,16 @@ impl Motion {
         })
     }
 
+    /// Binds a hover trigger that opens a panel and leaves dismissal to an
+    /// explicit action, such as clicking outside the Launcher.
+    pub fn trigger_hover_latched(panel: PanelId, widget: Rectangle) -> Rectangle {
+        widget.on_hover(move |inside| {
+            if inside {
+                Self::open(panel);
+            }
+        })
+    }
+
     /// Binds a rail trigger to a panel. Leaving the trigger schedules a close,
     /// but does not close immediately; entering the panel cancels that close.
     pub fn trigger_hover(panel: PanelId, widget: Rectangle) -> Rectangle {

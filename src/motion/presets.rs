@@ -8,22 +8,22 @@ pub const PANEL_OPEN: SpringConfig = SpringConfig::panel_open();
 /// Quicker closing profile with controlled damping.
 pub const PANEL_CLOSE: SpringConfig = SpringConfig::panel_close();
 
-/// Launcher opens a little more deliberately than the Dashboard.
+/// Launcher opening is about 25% slower than the previous Launcher profile.
 pub const LAUNCHER_OPEN: SpringConfig = SpringConfig {
-    stiffness: 260.0,
-    damping: 31.0,
+    stiffness: 165.0,
+    damping: 25.0,
     mass: 1.0,
     rest_delta: 0.0015,
     rest_speed: 0.02,
-    max_duration: Duration::from_millis(1500),
+    max_duration: Duration::from_millis(500),
 };
 
-/// Launcher also closes more gently, without changing other panels.
+/// Launcher closing is about 25% slower than the previous Launcher profile.
 pub const LAUNCHER_CLOSE: SpringConfig = SpringConfig {
-    stiffness: 240.0,
-    damping: 30.0,
+    stiffness: 150.0,
+    damping: 24.0,
     mass: 1.0,
     rest_delta: 0.0015,
     rest_speed: 0.02,
-    max_duration: Duration::from_millis(1500),
+    max_duration: Duration::from_millis(400),
 };

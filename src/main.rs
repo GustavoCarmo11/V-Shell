@@ -5,16 +5,18 @@ mod theme;
 mod wallpaper;
 
 use amane::{
-    App, Center, Color, Column, End, Full, Horizontal, Image, InputArea, Layer, LayerWindow,
-    Keyboard, Monitor, Parent, Pointer, Rectangle, Service, Stack, Start, Text, Vertical, Widget, Workspace,
-    Workspaces, Zone,
+    App, Apps, Center, Color, Column, End, Full, Horizontal, Image, InputArea, Keyboard, Layer,
+    LayerWindow, Monitor, Parent, Pointer, Rectangle, Service, Stack, Start, Text, Vertical,
+    Widget, Workspace, Workspaces, Zone,
 };
 
 use drawer::{DASHBOARD_HEIGHT, DASHBOARD_WIDTH, DrawerState};
-use launcher::{LauncherState, PANEL_BOTTOM_GAP, PANEL_HEIGHT as LAUNCHER_HEIGHT, PANEL_WIDTH as LAUNCHER_WIDTH};
+use launcher::{
+    LauncherState, PANEL_BOTTOM_GAP, PANEL_HEIGHT as LAUNCHER_HEIGHT, PANEL_WIDTH as LAUNCHER_WIDTH,
+};
+use motion::{Motion, PanelId};
 use theme::{Theme, ThemeColors, ThemeMode};
 use wallpaper::WallpaperService;
-use motion::{Motion, PanelId};
 
 const RAIL_WIDTH: f32 = 60.0;
 const BORDER_SIZE: f32 = 10.0;
@@ -31,6 +33,10 @@ const ORIGIN_HOVER_DEPTH: f32 = BORDER_SIZE + 28.0;
 // --------------------------------------------------
 
 fn main() {
+    // Start Amane's desktop-entry scan before the Launcher is first opened.
+    // Apps::listen scans XDG application and icon directories asynchronously.
+    let _ = Apps::read().list().len();
+
     App::new()
         .font("Rubik")
         .window_per_monitor(background)
@@ -170,11 +176,24 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
     let launcher_motion = LauncherState::sample(-launcher_travel);
     let launcher_progress = launcher_motion.progress.clamp(0.0, 1.0);
     let launcher_deformation = launcher_motion.deformation;
+    // Building every desktop-entry row on every animation frame is expensive.
+    // App scanning is prewarmed during startup and the list is virtualized, so
+    // its first visible rows can be built during the opening transition.
+    let render_launcher_apps = launcher_progress > 0.001;
     // The panel is bottom-aligned. When open, its lower edge meets the inner
     // edge of the bottom frame; when closed, it is fully below the monitor.
     let launcher_translate_y = LAUNCHER_HEIGHT - launcher_travel * launcher_progress;
     let launcher_panel_left = ((monitor.width as f32 - LAUNCHER_WIDTH) / 2.0).max(0.0);
     let launcher_panel_top = monitor.height as f32 - launcher_travel * launcher_progress;
+
+    // Keep each invisible origin target only on the part of the edge that is
+    // not already covered by its moving panel. This lets the panel itself own
+    // hover events as soon as it reaches the pointer.
+    let dashboard_origin_y = (panel_top + panel_height).clamp(0.0, ORIGIN_HOVER_DEPTH);
+    let dashboard_origin_height = (ORIGIN_HOVER_DEPTH - dashboard_origin_y).max(0.0);
+    let launcher_origin_y = monitor.height as f32 - ORIGIN_HOVER_DEPTH;
+    let launcher_origin_bottom = launcher_panel_top.clamp(launcher_origin_y, monitor.height as f32);
+    let launcher_origin_height = (launcher_origin_bottom - launcher_origin_y).max(0.0);
 
     // Pointer input covers the rail and the two panel-origin areas.
     // Dashboard emerges from the top-center edge; Launcher emerges from bottom-center.
@@ -206,10 +225,8 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         // centered affine transform so pointer interaction follows the shape.
         let half_width = panel_width * 0.5;
         let half_height = panel_height * 0.5;
-        let extent_x = deformation.sx.abs() * half_width
-            + deformation.kx.abs() * half_height;
-        let extent_y = deformation.ky.abs() * half_width
-            + deformation.sy.abs() * half_height;
+        let extent_x = deformation.sx.abs() * half_width + deformation.kx.abs() * half_height;
+        let extent_y = deformation.ky.abs() * half_width + deformation.sy.abs() * half_height;
         let center_x = panel_left + half_width;
         let center_y = panel_top + half_height;
 
@@ -228,8 +245,21 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         }
     }
 
-    if launcher_progress > 0.001 {
-        // Include the actual transformed Launcher bounds while it is visible.
+    if launcher_motion.is_open {
+        // While the Launcher is active, keep the whole monitor in the input
+        // region so clicks outside the panel can dismiss it.
+        input_areas.clear();
+        input_areas.push(InputArea {
+            x: 0,
+            y: 0,
+            width: monitor.width as i32,
+            height: monitor.height as i32,
+        });
+    }
+
+    if launcher_progress > 0.001 && !launcher_motion.is_open {
+        // During the closing animation, keep only the panel bounds interactive.
+        // While open, the full-monitor area above already covers this rectangle.
         let half_width = LAUNCHER_WIDTH * 0.5;
         let half_height = LAUNCHER_HEIGHT * 0.5;
         let extent_x = launcher_deformation.sx.abs() * half_width
@@ -258,7 +288,12 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
 
     let shader_values = vec![
         // Rail width, frame thickness, inner-left radius, inner-right radius.
-        [RAIL_WIDTH, BORDER_SIZE, INNER_LEFT_RADIUS, INNER_RIGHT_RADIUS],
+        [
+            RAIL_WIDTH,
+            BORDER_SIZE,
+            INNER_LEFT_RADIUS,
+            INNER_RIGHT_RADIUS,
+        ],
         // Shared surface RGBA.
         [
             surface.red() as f32 / 255.0,
@@ -271,9 +306,19 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         // Dashboard radius, progress and merge radius.
         [BORDER_RADIUS, shape_progress, DASHBOARD_MERGE_RADIUS, 0.0],
         // Same centered 2D deformation matrix used by the Dashboard widget.
-        [deformation.sx, deformation.kx, deformation.ky, deformation.sy],
+        [
+            deformation.sx,
+            deformation.kx,
+            deformation.ky,
+            deformation.sy,
+        ],
         // Launcher geometry in full-window coordinates.
-        [launcher_panel_left, launcher_panel_top, LAUNCHER_WIDTH, LAUNCHER_HEIGHT],
+        [
+            launcher_panel_left,
+            launcher_panel_top,
+            LAUNCHER_WIDTH,
+            LAUNCHER_HEIGHT,
+        ],
         // Launcher corner radius, visibility progress and merge radius.
         [26.0, launcher_progress, 19.0, 0.0],
         // Same centered 2D deformation matrix used by the Launcher widget.
@@ -304,14 +349,12 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         .width(Parent)
         .height(Parent)
         .align_child(Center, Start)
-        .child(
-            Motion::panel_hover(
-                PanelId::Dashboard,
-                dashboard_panel(theme)
-                    .transform_matrix(deformation)
-                    .translate(0.0, panel_top),
-            ),
-        );
+        .child(Motion::panel_hover(
+            PanelId::Dashboard,
+            dashboard_panel(theme)
+                .transform_matrix(deformation)
+                .translate(0.0, panel_top),
+        ));
 
     // The Launcher shares the fullscreen SDF with the rail and bottom frame.
     // Its bottom edge meets the inner edge of the bottom frame, so the bottom
@@ -320,13 +363,11 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         .width(Parent)
         .height(Parent)
         .align_child(Center, End)
-        .child(
-            LauncherState::hover_area(
-                LauncherState::panel(theme)
-                    .transform_matrix(launcher_motion.deformation)
-                    .translate(0.0, launcher_translate_y),
-            ),
-        );
+        .child(LauncherState::hover_area(
+            LauncherState::panel(theme, render_launcher_apps)
+                .transform_matrix(launcher_motion.deformation)
+                .translate(0.0, launcher_translate_y),
+        ));
 
     // Hover is detected at each module's origin in the perimeter, not on rail icons.
     // Dashboard starts at the top-center edge.
@@ -334,24 +375,21 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         PanelId::Dashboard,
         Rectangle::new()
             .width(panel_width)
-            .height(ORIGIN_HOVER_DEPTH)
+            .height(dashboard_origin_height)
             .fill(Color::TRANSPARENT)
             .cursor(Pointer)
-            .translate(panel_left, 0.0),
+            .translate(panel_left, dashboard_origin_y),
     );
 
     // Launcher starts at the bottom-center edge.
-    let launcher_origin_hover = Motion::trigger_hover(
+    let launcher_origin_hover = Motion::trigger_hover_latched(
         PanelId::Launcher,
         Rectangle::new()
             .width(LAUNCHER_WIDTH)
-            .height(ORIGIN_HOVER_DEPTH)
+            .height(launcher_origin_height)
             .fill(Color::TRANSPARENT)
             .cursor(Pointer)
-            .translate(
-                launcher_panel_left,
-                monitor.height as f32 - ORIGIN_HOVER_DEPTH,
-            ),
+            .translate(launcher_panel_left, launcher_origin_y),
     );
 
     LayerWindow::new()
@@ -372,15 +410,9 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
             Rectangle::new()
                 .width(Parent)
                 .height(Parent)
-                .on_hover(|inside| {
-                    if !inside {
-                        // Pointer may leave the Wayland input region while crossing
-                        // the gap between a rail trigger and its expanding panel.
-                        // Keep active panels alive briefly so the destination panel
-                        // can receive the next pointer-enter event.
-                        Motion::schedule_close_all(motion::TRIGGER_HOVER_LEAVE_GRACE);
-                    }
-                })
+                // The full-screen input region is enabled only while the
+                // Launcher is open. A click not handled by a panel/control
+                // therefore dismisses it, even after the pointer left the panel.
                 .on_click(|_| {
                     if LauncherState::is_open() {
                         LauncherState::close();
@@ -540,8 +572,7 @@ fn dashboard_button(theme: ThemeColors) -> Rectangle {
         theme.accent
     };
 
-    icon_button("\u{e871}", background, foreground)
-        .on_click(|_| Motion::open(PanelId::Dashboard))
+    icon_button("\u{e871}", background, foreground).on_click(|_| Motion::open(PanelId::Dashboard))
 }
 
 // --------------------------------------------------
@@ -656,14 +687,9 @@ fn launcher_button(theme: ThemeColors) -> Rectangle {
     } else {
         theme.button_surface
     };
-    let foreground = if open {
-        theme.active_text
-    } else {
-        theme.text
-    };
+    let foreground = if open { theme.active_text } else { theme.text };
 
-    icon_button("\u{e5c3}", background, foreground)
-        .on_click(|_| LauncherState::open())
+    icon_button("\u{e5c3}", background, foreground).on_click(|_| LauncherState::open())
 }
 
 // --------------------------------------------------
