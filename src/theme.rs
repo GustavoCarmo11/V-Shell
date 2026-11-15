@@ -23,6 +23,7 @@ pub struct ThemeColors {
     // Surfaces
     pub bar_surface: Color,
     pub button_surface: Color,
+    pub workspace_occupied_surface: Color,
     pub active_surface: Color,
 
     // Active workspace content
@@ -45,6 +46,7 @@ pub struct Theme {
     // Surfaces
     bar_surface: Animation<Color>,
     button_surface: Animation<Color>,
+    workspace_occupied_surface: Animation<Color>,
     active_surface: Animation<Color>,
 
     // Active workspace
@@ -110,6 +112,15 @@ impl ThemeColors {
                 255,
             ),
 
+            // Use Material 3's strongest surface container role for a clearer
+            // distinction between occupied inactive workspaces and the rail.
+            workspace_occupied_surface: palette_color(
+                &contents,
+                &key("surface_container_highest"),
+                fallback.workspace_occupied_surface,
+                255,
+            ),
+
             active_surface: palette_color(
                 &contents,
                 &key("primary_container"),
@@ -145,6 +156,7 @@ impl ThemeColors {
 
                 bar_surface: Color::rgba(24, 24, 37, 215),
                 button_surface: Color::rgb(49, 50, 68),
+                workspace_occupied_surface: Color::rgb(85, 88, 106),
                 active_surface: Color::rgb(69, 71, 90),
 
                 active_text: Color::rgb(255, 219, 213),
@@ -160,6 +172,7 @@ impl ThemeColors {
 
                 bar_surface: Color::rgba(239, 241, 245, 215),
                 button_surface: Color::rgb(220, 224, 232),
+                workspace_occupied_surface: Color::rgb(192, 196, 210),
                 active_surface: Color::rgb(204, 208, 218),
 
                 active_text: Color::rgb(96, 43, 34),
@@ -187,6 +200,7 @@ impl Theme {
 
             bar_surface: theme.bar_surface.value(),
             button_surface: theme.button_surface.value(),
+            workspace_occupied_surface: theme.workspace_occupied_surface.value(),
             active_surface: theme.active_surface.value(),
 
             active_text: theme.active_text.value(),
@@ -203,6 +217,12 @@ impl Theme {
         retarget_color(&mut self.bar_surface, colors.bar_surface, duration);
 
         retarget_color(&mut self.button_surface, colors.button_surface, duration);
+
+        retarget_color(
+            &mut self.workspace_occupied_surface,
+            colors.workspace_occupied_surface,
+            duration,
+        );
 
         retarget_color(&mut self.active_surface, colors.active_surface, duration);
 
@@ -272,6 +292,7 @@ impl Service for Theme {
 
             bar_surface: animated_color(colors.bar_surface),
             button_surface: animated_color(colors.button_surface),
+            workspace_occupied_surface: animated_color(colors.workspace_occupied_surface),
             active_surface: animated_color(colors.active_surface),
 
             active_text: animated_color(colors.active_text),

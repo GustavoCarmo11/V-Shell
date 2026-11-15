@@ -48,21 +48,9 @@ impl Service for WallpaperService {
 
         let state_file = state_home.join("caelestia-rs").join("wallpaper");
 
-        // Procura imagens no diretório.
-        let mut files: Vec<PathBuf> = match fs::read_dir(&directory) {
-            Ok(entries) => entries
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .filter(|path| path.is_file() && supported_image(path))
-                .collect(),
-
-            Err(error) => {
-                eprintln!("Wallpaper: erro lendo {:?}: {}", directory, error);
-
-                Vec::new()
-            }
-        };
-
+        // Caelestia-style discovery: scan the wallpaper directory recursively,
+        // so category folders can be used without losing nested images.
+        let mut files = collect_wallpapers(&directory);
         files.sort();
 
         println!("Wallpaper: {} imagens encontradas", files.len());
@@ -162,32 +150,47 @@ impl WallpaperService {
     }
 
     // --------------------------------------------------
-    // NEXT WALLPAPER
+    // WALLPAPER LIBRARY
     // --------------------------------------------------
 
-    pub fn next() -> Option<PathBuf> {
-        // Descobre a próxima imagem.
+    /// Returns the sorted wallpaper library used by the Dashboard picker.
+    pub fn wallpapers() -> Vec<PathBuf> {
+        Self::read().files.clone()
+    }
+
+    /// Returns the currently applied source image, if one has been selected.
+    pub fn current() -> Option<PathBuf> {
+        Self::read().current.clone()
+    }
+
+    /// Returns the configured wallpaper directory.
+    pub fn directory() -> PathBuf {
+        wallpaper_directory()
+    }
+
+    /// Refresh the library after the user adds or removes wallpaper files.
+    pub fn refresh() -> usize {
+        let directory = wallpaper_directory();
+        let mut files = collect_wallpapers(&directory);
+        files.sort();
+
+        let mut service = Self::write();
+        service.files = files;
+        service.files.len()
+    }
+
+    /// Apply an item from the library, preserving palette generation, the
+    /// background crossfade, persistence and the existing LRU image cache.
+    pub fn select(path: &Path) -> Option<PathBuf> {
         let selected = {
             let service = Self::read();
+            service
+                .files
+                .iter()
+                .find(|candidate| candidate.as_path() == path)
+                .cloned()
+        }?;
 
-            if service.files.is_empty() {
-                eprintln!("Wallpaper: nenhum arquivo encontrado");
-                return None;
-            }
-
-            let current_index = service
-                .current
-                .as_ref()
-                .and_then(|current| service.files.iter().position(|path| path == current));
-
-            let next_index = current_index
-                .map(|index| (index + 1) % service.files.len())
-                .unwrap_or(0);
-
-            service.files[next_index].clone()
-        };
-
-        // Não repete o processamento se só existe uma imagem.
         let unchanged = {
             let service = Self::read();
             service.current.as_ref() == Some(&selected)
@@ -200,10 +203,7 @@ impl WallpaperService {
                         Theme::reload_for_wallpaper();
                         mark_cache_used(&selected);
                     }
-
-                    Err(error) => {
-                        eprintln!("Wallpaper: {error}");
-                    }
+                    Err(error) => eprintln!("Wallpaper: {error}"),
                 }
             } else {
                 mark_cache_used(&selected);
@@ -214,52 +214,42 @@ impl WallpaperService {
 
         println!("Preparando wallpaper: {}", selected.display());
 
-        // Primeiro prepara a imagem e a paleta.
+        // Generate the palette before switching the active image, just as the
+        // previous quick-switch action did.
         let palette_generated = match generate_palette(&selected) {
             Ok(()) => {
                 println!("Wallpaper: cache preparado.");
                 true
             }
-
             Err(error) => {
                 eprintln!("Wallpaper: erro ao preparar: {error}");
                 false
             }
         };
 
-        // Atualiza o estado e inicia o crossfade.
         let previous = {
             let mut service = Self::write();
-
             let previous = service.current.clone();
 
             service.previous = previous.clone();
             service.current = Some(selected.clone());
-
             service.fade = Animation::new(0.0)
                 .duration(CROSSFADE_DURATION)
                 .easing(Easing::Out);
-
             service.transition_pending = true;
-
             service.save(&selected);
 
             previous
         };
 
-        // Atualiza o tema no modo sugerido pelo wallpaper.
         if palette_generated {
             Theme::reload_for_wallpaper();
         }
 
-        // Protege as imagens utilizadas durante o crossfade.
         let mut protected = vec![selected.clone()];
-
         if let Some(previous) = previous {
             protected.push(previous);
         }
-
-        // Remove os caches menos recentemente utilizados.
         prune_wallpaper_cache(&protected);
 
         Some(selected)
@@ -290,6 +280,57 @@ impl WallpaperService {
             eprintln!("Wallpaper: erro atualizando seleção: {error}");
         }
     }
+}
+
+// --------------------------------------------------
+// WALLPAPER DISCOVERY
+// --------------------------------------------------
+
+fn wallpaper_directory() -> PathBuf {
+    let home = env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
+
+    env::var_os("CAELESTIA_RS_WALLPAPER_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join("Pictures/Wallpapers"))
+}
+
+fn collect_wallpapers(directory: &Path) -> Vec<PathBuf> {
+    fn visit(directory: &Path, files: &mut Vec<PathBuf>) {
+        let entries = match fs::read_dir(directory) {
+            Ok(entries) => entries,
+            Err(error) => {
+                if directory.exists() {
+                    eprintln!("Wallpaper: erro lendo {:?}: {}", directory, error);
+                }
+                return;
+            }
+        };
+
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            let file_type = match entry.file_type() {
+                Ok(file_type) => file_type,
+                Err(_) => continue,
+            };
+
+            // Do not follow symlinked directories: that avoids recursive loops.
+            if file_type.is_dir() {
+                visit(&path, files);
+            } else if (file_type.is_file() || (file_type.is_symlink() && path.is_file()))
+                && supported_image(&path)
+            {
+                // File symlinks are common in wallpaper libraries; follow those,
+                // but never recurse into symlinked directories.
+                files.push(path);
+            }
+        }
+    }
+
+    let mut files = Vec::new();
+    visit(directory, &mut files);
+    files
 }
 
 // --------------------------------------------------

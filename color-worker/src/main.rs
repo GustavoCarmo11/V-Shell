@@ -234,6 +234,7 @@ fn append_scheme(output: &mut String, name: &str, scheme: &MaterializedScheme) {
         ("surface", scheme.surface),
         ("surface_container", scheme.surface_container),
         ("surface_container_high", scheme.surface_container_high),
+        ("surface_container_highest", scheme.surface_container_highest),
         ("surface_container_low", scheme.surface_container_low),
         ("primary", scheme.primary),
         ("on_primary", scheme.on_primary),

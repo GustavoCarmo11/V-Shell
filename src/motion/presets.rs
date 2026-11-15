@@ -11,19 +11,19 @@ pub const PANEL_CLOSE: SpringConfig = SpringConfig::panel_close();
 /// Launcher opening is about 25% slower than the previous Launcher profile.
 pub const LAUNCHER_OPEN: SpringConfig = SpringConfig {
     stiffness: 165.0,
-    damping: 25.0,
+    damping: 20.0,
     mass: 1.0,
     rest_delta: 0.0015,
     rest_speed: 0.02,
-    max_duration: Duration::from_millis(500),
+    max_duration: Duration::from_millis(700),
 };
 
 /// Launcher closing is about 25% slower than the previous Launcher profile.
 pub const LAUNCHER_CLOSE: SpringConfig = SpringConfig {
     stiffness: 150.0,
-    damping: 24.0,
+    damping: 19.0,
     mass: 1.0,
     rest_delta: 0.0015,
     rest_speed: 0.02,
-    max_duration: Duration::from_millis(400),
+    max_duration: Duration::from_millis(700),
 };

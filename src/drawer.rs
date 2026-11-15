@@ -1,8 +1,5 @@
 use crate::motion::{Motion, PanelId, PanelMotionSample};
 
-pub const DASHBOARD_WIDTH: f32 = 420.0;
-pub const DASHBOARD_HEIGHT: f32 = 390.0;
-
 /// Dashboard controls backed by the shared motion and deformation engine.
 pub struct DrawerState;
 

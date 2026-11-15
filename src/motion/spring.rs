@@ -15,12 +15,12 @@ impl SpringConfig {
     /// Responsive opening motion with a restrained overshoot.
     pub const fn panel_open() -> Self {
         Self {
-            stiffness: 380.0,
-            damping: 34.0,
+            stiffness: 165.0,
+            damping: 20.0,
             mass: 1.0,
             rest_delta: 0.0015,
             rest_speed: 0.02,
-            max_duration: Duration::from_millis(1300),
+            max_duration: Duration::from_millis(700),
         }
     }
 
@@ -29,12 +29,12 @@ impl SpringConfig {
     /// this preset (280 / 30) settles in about 462 ms with the same thresholds.
     pub const fn panel_close() -> Self {
         Self {
-            stiffness: 280.0,
-            damping: 30.0,
+            stiffness: 150.0,
+            damping: 19.0,
             mass: 1.0,
             rest_delta: 0.0015,
             rest_speed: 0.02,
-            max_duration: Duration::from_millis(1300),
+            max_duration: Duration::from_millis(700),
         }
     }
 

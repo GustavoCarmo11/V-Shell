@@ -1,26 +1,34 @@
 mod drawer;
 mod launcher;
+mod modules;
 mod motion;
 mod special_workspace;
 mod theme;
 mod wallpaper;
+mod workspace_motion;
 
 use amane::{
-    App, Apps, Canvas, Center, Color, Column, End, Full, Horizontal, Image, InputArea, Keyboard,
-    Layer, LayerWindow, Monitor, Parent, Path, Pointer, Rectangle, Service, Shape, SpaceBetween,
-    Stack, Start, Text, Vertical, Widget, Workspace, Workspaces, Zone,
+    App, Apps, Center, Color, Column, End, Full, Horizontal, Image, InputArea, Keyboard, Layer,
+    LayerWindow, Monitor, Parent, Pointer, Rectangle, Service, SpaceBetween, Stack, Start, Text,
+    Vertical, Widget, Workspace, Workspaces, Zone,
 };
 
-use drawer::{DASHBOARD_HEIGHT, DASHBOARD_WIDTH, DrawerState};
+use drawer::DrawerState;
 use launcher::{
     LauncherState, PANEL_BOTTOM_GAP, PANEL_HEIGHT as LAUNCHER_HEIGHT, PANEL_WIDTH as LAUNCHER_WIDTH,
+};
+use modules::dashboard::{
+    dashboard_dimensions, dashboard_panel, dashboard_size_sample, set_dashboard_size_target,
 };
 use motion::{Motion, PanelId};
 use special_workspace::SpecialWorkspace;
 use theme::{Theme, ThemeColors, ThemeMode};
 use wallpaper::WallpaperService;
+use workspace_motion::WorkspaceMotion;
 
 const RAIL_WIDTH: f32 = 60.0;
+const WORKSPACE_INDICATOR_SIZE: f32 = 44.0;
+const WORKSPACE_GAP: f32 = 6.0;
 const BORDER_SIZE: f32 = 10.0;
 const BORDER_RADIUS: f32 = 24.0;
 const INNER_LEFT_RADIUS: f32 = 30.0;
@@ -160,8 +168,9 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
 
     // BlobRect follows the Dashboard's actual scene-space velocity.
     // The same affine deformation is applied to its widget and to its SDF.
-    let panel_width = DASHBOARD_WIDTH;
-    let panel_height = DASHBOARD_HEIGHT;
+    let dashboard_target = dashboard_dimensions();
+    set_dashboard_size_target(dashboard_target.panel_width, dashboard_target.panel_height);
+    let (panel_width, panel_height) = dashboard_size_sample();
     let travel_y = panel_height + DASHBOARD_TOP;
     let motion = DrawerState::sample(travel_y);
 
@@ -353,7 +362,7 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         .align_child(Center, Start)
         .child(Motion::panel_hover(
             PanelId::Dashboard,
-            dashboard_panel(theme)
+            dashboard_panel(theme, DrawerState::is_open(), panel_width, panel_height)
                 .transform_matrix(deformation)
                 .translate(0.0, panel_top),
         ));
@@ -441,43 +450,112 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
 
 fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     let special_active = SpecialWorkspace::active_on(output);
-    let mut workspace_buttons: Vec<Box<dyn Widget>> = Vec::new();
+    let workspaces = Workspaces::read();
+    let workspace_list = workspaces.list();
+    let workspace_count = workspace_list.len();
+    let active_index = workspace_list
+        .iter()
+        .position(|workspace| workspace.active());
 
-    if special_active {
-        // A visible special workspace replaces the regular workspace list.
-        workspace_buttons.push(Box::new(special_workspace_button(theme)));
+    WorkspaceMotion::set_target(output, active_index, workspace_count, special_active);
+    let workspace_motion = WorkspaceMotion::sample(output);
+
+    let regular_height = if workspace_count == 0 {
+        WORKSPACE_INDICATOR_SIZE
     } else {
-        let workspaces = Workspaces::read();
+        workspace_count as f32 * WORKSPACE_INDICATOR_SIZE
+            + workspace_count.saturating_sub(1) as f32 * WORKSPACE_GAP
+    };
+    let special_progress = workspace_motion.special_progress;
+    let regular_opacity = 1.0 - special_progress;
 
-        for workspace in workspaces.list().iter() {
-            workspace_buttons.push(Box::new(workspace_button(workspace, theme)));
+    let mut workspace_buttons: Vec<Box<dyn Widget>> = Vec::new();
+    if special_progress < 0.999 {
+        for (index, workspace) in workspace_list.iter().enumerate() {
+            let active_progress = WorkspaceMotion::workspace_progress(output, index);
+            workspace_buttons.push(Box::new(workspace_button(
+                workspace,
+                theme,
+                active_progress,
+            )));
         }
     }
 
-    let workspace_group = Column::new(workspace_buttons)
+    let workspace_column = Column::new(workspace_buttons)
         .width(Parent)
-        .gap(6.0)
+        .height(regular_height)
+        .gap(WORKSPACE_GAP)
         .align(Center)
         .justify(Start);
 
-    // The central slot is reserved for active-window metadata. Its data source
-    // will be connected later; for now it identifies the future information area.
-    let workspace_section = Column::new(vec![Box::new(workspace_group), Box::new(divider(theme))])
+    let mut workspace_layers: Vec<Box<dyn Widget>> = Vec::new();
+    let regular_layer = Rectangle::new()
         .width(Parent)
-        .gap(10.0)
-        .align(Center)
-        .justify(Start);
+        .height(regular_height)
+        .opacity(regular_opacity)
+        .child(workspace_column);
+    workspace_layers.push(Box::new(regular_layer));
+
+    // Material Symbols Rounded `star` is the filled glyph (not star_outline).
+    // It retains the short scale pulse and crossfade when the special
+    // workspace appears, while regular workspace buttons shrink back to circles.
+    if special_progress > 0.001 {
+        workspace_layers.push(Box::new(
+            Rectangle::new()
+                .width(WORKSPACE_INDICATOR_SIZE)
+                .height(WORKSPACE_INDICATOR_SIZE)
+                .opacity(special_progress)
+                .align_child(Center, Center)
+                .child(
+                    Text::new("\u{e838}")
+                        .font("Material Symbols Rounded")
+                        .size(22.0 * workspace_motion.special_scale)
+                        .color(theme.active_text),
+                )
+                .translate(2.0, 0.0),
+        ));
+    }
+
+    // The workspace area contracts smoothly to a single star slot for the
+    // special workspace, without depending on an off-screen moving capsule.
+    let workspace_group_height = (WORKSPACE_INDICATOR_SIZE
+        + (regular_height - WORKSPACE_INDICATOR_SIZE) * regular_opacity)
+        .clamp(
+            WORKSPACE_INDICATOR_SIZE,
+            regular_height.max(WORKSPACE_INDICATOR_SIZE),
+        );
+
+    let workspace_group = Rectangle::new()
+        .width(Parent)
+        .height(workspace_group_height)
+        .clip()
+        .child(
+            Stack::new(workspace_layers)
+                .width(Parent)
+                .height(workspace_group_height),
+        );
+
+    // Workspaces stay at the top, the central slot is reserved for active
+    // window metadata, and the remaining shell actions stay grouped below.
+    let workspace_section = Column::new(vec![
+        // Keep the workspace stack a little below the top edge of the rail.
+        // The spacer remains outside the animated workspace group.
+        Box::new(Rectangle::new().width(1.0).height(10.0)),
+        Box::new(workspace_group),
+        Box::new(divider(theme)),
+    ])
+    .width(Parent)
+    .gap(10.0)
+    .align(Center)
+    .justify(Start);
 
     let window_section = active_window_area(theme);
 
     let bottom_section = Column::new(vec![
-        Box::new(dashboard_button(theme)),
         Box::new(home_button(theme)),
         Box::new(divider(theme)),
-        Box::new(wallpaper_button(theme)),
         Box::new(theme_button(theme)),
         Box::new(divider(theme)),
-        Box::new(launcher_button(theme)),
         Box::new(session_button(theme)),
     ])
     .width(Parent)
@@ -485,8 +563,6 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     .align(Center)
     .justify(End);
 
-    // Workspaces stay at the top, the active-window slot occupies the middle,
-    // and the existing shell actions remain grouped at the bottom.
     Rectangle::new()
         .width(RAIL_WIDTH)
         .height(height)
@@ -506,99 +582,108 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
 }
 
 // --------------------------------------------------
-// DASHBOARD PANEL
+// WORKSPACES
 // --------------------------------------------------
 
-fn dashboard_panel(theme: ThemeColors) -> Rectangle {
-    let intro_card = Rectangle::new()
-        .width(Parent)
-        .height(132.0)
-        .radius(20.0)
-        .fill(theme.button_surface)
-        .padding(18.0)
-        .align_child(Start, Start)
-        .child(
-            Column::new(vec![
-                Box::new(Text::new("G-Shell").size(19.0).color(theme.text)),
-                Box::new(
-                    Text::new("Seu ambiente, em um só lugar.")
-                        .size(13.0)
-                        .color(theme.muted),
-                ),
-            ])
+fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: f32) -> Rectangle {
+    let id = workspace.id();
+    let label = workspace
+        .name()
+        .map(str::to_owned)
+        .unwrap_or_else(|| workspace.index().to_string());
+
+    // Preserve the small CSS overshoot for the geometry, while keeping
+    // opacity in its valid 0..1 range.
+    let morph = active_progress.clamp(-0.10, 1.10);
+    let active_opacity = active_progress.clamp(0.0, 1.0);
+    let width = 32.0 + 2.0 * morph;
+    let height = 32.0 + 10.0 * morph;
+    let radius = height * 0.5;
+    let x = (WORKSPACE_INDICATOR_SIZE - width) * 0.5;
+    let y = (WORKSPACE_INDICATOR_SIZE - height) * 0.5;
+
+    let mut layers: Vec<Box<dyn Widget>> = Vec::new();
+
+    // Inactive circle surface. This uses Material 3's highest container role
+    // at full opacity, so it remains clearly separated from the rail.
+    layers.push(Box::new(
+        Rectangle::new()
+            .width(width)
+            .height(height)
+            .radius(radius)
+            .fill(theme.workspace_occupied_surface)
+            .translate(x, y),
+    ));
+
+    // Crossfade the active surface over the same interpolated outline. This
+    // animates the background color just like the CSS `background-color`.
+    if active_opacity > 0.001 {
+        layers.push(Box::new(
+            Rectangle::new()
+                .width(width)
+                .height(height)
+                .radius(radius)
+                .fill(theme.active_surface)
+                .opacity(active_opacity)
+                .translate(x, y),
+        ));
+    }
+
+    // Text color follows the same CSS progress, fading from the inactive
+    // foreground to the active foreground without changing its alignment.
+    layers.push(Box::new(
+        Rectangle::new()
             .width(Parent)
             .height(Parent)
-            .gap(8.0)
-            .align(Start)
-            .justify(Start),
-        );
+            .align_child(Center, Center)
+            .child(Text::new(label.clone()).size(15.0).color(theme.text)),
+    ));
 
-    let module_card = Rectangle::new()
-        .width(Parent)
-        .height(108.0)
-        .radius(20.0)
-        .fill(theme.button_surface)
-        .padding(18.0)
-        .align_child(Start, Start)
-        .child(
-            Column::new(vec![
-                Box::new(Text::new("Módulos").size(16.0).color(theme.text)),
-                Box::new(
-                    Text::new("Media e Desempenho serão integrados aqui.")
-                        .size(13.0)
-                        .color(theme.muted),
-                ),
-            ])
-            .width(Parent)
-            .height(Parent)
-            .gap(8.0)
-            .align(Start)
-            .justify(Start),
-        );
+    if active_opacity > 0.001 {
+        layers.push(Box::new(
+            Rectangle::new()
+                .width(Parent)
+                .height(Parent)
+                .opacity(active_opacity)
+                .align_child(Center, Center)
+                .child(Text::new(label).size(15.0).color(theme.active_text)),
+        ));
+    }
 
-    // Transparent content container: the shared SDF paints the panel behind it.
     Rectangle::new()
-        .width(DASHBOARD_WIDTH)
-        .height(DASHBOARD_HEIGHT)
-        .radius(BORDER_RADIUS)
-        .clip()
-        .padding(24.0)
-        .align_child(Start, Start)
-        .child(
-            Column::new(vec![
-                Box::new(Text::new("Dashboard").size(26.0).color(theme.text)),
-                Box::new(Text::new("Visão geral").size(13.0).color(theme.muted)),
-                Box::new(intro_card),
-                Box::new(module_card),
-            ])
-            .width(Parent)
-            .height(Parent)
-            .gap(14.0)
-            .align(Start)
-            .justify(Start),
-        )
+        .width(WORKSPACE_INDICATOR_SIZE)
+        .height(WORKSPACE_INDICATOR_SIZE)
+        .fill(Color::TRANSPARENT)
+        .cursor(Pointer)
+        .child(Stack::new(layers).width(Parent).height(Parent))
+        .on_click(move |_| {
+            Workspaces::focus(id);
+        })
 }
 
-// --------------------------------------------------
-// DASHBOARD BUTTON
-// --------------------------------------------------
-
-fn dashboard_button(theme: ThemeColors) -> Rectangle {
-    let open = DrawerState::is_open();
-
-    let background = if open {
-        theme.active_surface
-    } else {
-        theme.button_surface
-    };
-
-    let foreground = if open {
-        theme.active_text
-    } else {
-        theme.accent
-    };
-
-    icon_button("\u{e871}", background, foreground).on_click(|_| Motion::open(PanelId::Dashboard))
+// A compact placeholder for future active-window metadata.
+fn active_window_area(theme: ThemeColors) -> Rectangle {
+    Rectangle::new()
+        .width(44.0)
+        .height(76.0)
+        .radius(15.0)
+        .fill(theme.button_surface)
+        .align_child(Center, Center)
+        .child(
+            Column::new(vec![
+                Box::new(
+                    Text::new("\u{e8f4}")
+                        .font("Material Symbols Rounded")
+                        .size(19.0)
+                        .color(theme.muted),
+                ),
+                Box::new(Text::new("Janela").size(9.0).color(theme.muted)),
+                Box::new(Text::new("ativa").size(9.0).color(theme.muted)),
+            ])
+            .align(Center)
+            .justify(Center)
+            .gap(3.0),
+        )
 }
 
 // --------------------------------------------------
@@ -632,249 +717,6 @@ fn home_button(theme: ThemeColors) -> Rectangle {
 }
 
 // --------------------------------------------------
-// WORKSPACES
-// --------------------------------------------------
-
-fn workspace_button(workspace: &Workspace, theme: ThemeColors) -> Rectangle {
-    let active = workspace.active();
-    let occupied = workspace.windows() > 0;
-    let id = workspace.id();
-
-    let foreground = if active {
-        theme.active_text
-    } else {
-        theme.text
-    };
-
-    let label = workspace
-        .name()
-        .map(str::to_owned)
-        .unwrap_or_else(|| workspace.index().to_string());
-
-    let background = if active {
-        Some((6, theme.active_surface))
-    } else if occupied {
-        Some((4, theme.button_surface))
-    } else {
-        None
-    };
-
-    workspace_indicator(label, foreground, background, false)
-        .cursor(Pointer)
-        .on_click(move |_| {
-            Workspaces::focus(id);
-        })
-}
-
-fn special_workspace_button(theme: ThemeColors) -> Rectangle {
-    workspace_indicator(
-        "\u{e838}".to_owned(),
-        theme.active_text,
-        Some((6, theme.active_surface)),
-        true,
-    )
-}
-
-fn workspace_indicator(
-    label: String,
-    foreground: Color,
-    background: Option<(usize, Color)>,
-    is_icon: bool,
-) -> Rectangle {
-    let label = if is_icon {
-        Text::new(label)
-            .font("Material Symbols Rounded")
-            .size(21.0)
-            .color(foreground)
-    } else {
-        Text::new(label).size(14.0).color(foreground)
-    };
-
-    let label_layer = Rectangle::new()
-        .width(Parent)
-        .height(Parent)
-        .align_child(Center, Center)
-        .child(label);
-
-    let mut layers: Vec<Box<dyn Widget>> = Vec::new();
-
-    if let Some((sides, fill)) = background {
-        layers.push(Box::new(cookie_canvas(38.0, sides, fill)));
-    }
-
-    layers.push(Box::new(label_layer));
-
-    Rectangle::new()
-        .width(38.0)
-        .height(38.0)
-        .fill(Color::TRANSPARENT)
-        .child(Stack::new(layers).width(Parent).height(Parent))
-}
-
-// A compact placeholder for future active-window metadata.
-fn active_window_area(theme: ThemeColors) -> Rectangle {
-    Rectangle::new()
-        .width(44.0)
-        .height(76.0)
-        .radius(15.0)
-        .fill(theme.button_surface)
-        .align_child(Center, Center)
-        .child(
-            Column::new(vec![
-                Box::new(
-                    Text::new("\u{e8f4}")
-                        .font("Material Symbols Rounded")
-                        .size(19.0)
-                        .color(theme.muted),
-                ),
-                Box::new(Text::new("Janela").size(9.0).color(theme.muted)),
-                Box::new(Text::new("ativa").size(9.0).color(theme.muted)),
-            ])
-            .align(Center)
-            .justify(Center)
-            .gap(3.0),
-        )
-}
-
-// Material 3's Cookie4Sided and Cookie6Sided are rounded polygons. This helper
-// reproduces their repeated vertices and rounded corners as a small Canvas path.
-fn cookie_canvas(size: f32, sides: usize, fill: Color) -> Canvas {
-    #[derive(Clone, Copy)]
-    struct Vertex {
-        x: f32,
-        y: f32,
-        rounding: f32,
-    }
-
-    let (seeds, repetitions): ([(f32, f32, f32); 2], usize) = match sides {
-        4 => ([(1.237, 1.236, 0.258), (0.500, 0.918, 0.233)], 4),
-        _ => ([(0.723, 0.884, 0.394), (0.500, 1.099, 0.398)], 6),
-    };
-
-    let mut vertices = Vec::with_capacity(repetitions * seeds.len());
-
-    for repetition in 0..repetitions {
-        let angle = repetition as f32 * std::f32::consts::TAU / repetitions as f32;
-        let (sin, cos) = angle.sin_cos();
-
-        for (x, y, rounding) in seeds {
-            let dx = x - 0.5;
-            let dy = y - 0.5;
-
-            vertices.push(Vertex {
-                x: 0.5 + dx * cos - dy * sin,
-                y: 0.5 + dx * sin + dy * cos,
-                rounding,
-            });
-        }
-    }
-
-    let min_x = vertices
-        .iter()
-        .map(|point| point.x)
-        .fold(f32::INFINITY, f32::min);
-    let max_x = vertices
-        .iter()
-        .map(|point| point.x)
-        .fold(f32::NEG_INFINITY, f32::max);
-    let min_y = vertices
-        .iter()
-        .map(|point| point.y)
-        .fold(f32::INFINITY, f32::min);
-    let max_y = vertices
-        .iter()
-        .map(|point| point.y)
-        .fold(f32::NEG_INFINITY, f32::max);
-
-    let available = size - 4.0;
-    let scale = available / (max_x - min_x).max(max_y - min_y);
-    let offset_x = (size - (max_x - min_x) * scale) * 0.5;
-    let offset_y = (size - (max_y - min_y) * scale) * 0.5;
-
-    for point in &mut vertices {
-        point.x = (point.x - min_x) * scale + offset_x;
-        point.y = (point.y - min_y) * scale + offset_y;
-    }
-
-    let mut entries = Vec::with_capacity(vertices.len());
-    let mut exits = Vec::with_capacity(vertices.len());
-
-    for index in 0..vertices.len() {
-        let previous = vertices[(index + vertices.len() - 1) % vertices.len()];
-        let current = vertices[index];
-        let next = vertices[(index + 1) % vertices.len()];
-
-        let to_previous = (previous.x - current.x, previous.y - current.y);
-        let to_next = (next.x - current.x, next.y - current.y);
-        let previous_length =
-            (to_previous.0 * to_previous.0 + to_previous.1 * to_previous.1).sqrt();
-        let next_length = (to_next.0 * to_next.0 + to_next.1 * to_next.1).sqrt();
-
-        let previous_unit = (
-            to_previous.0 / previous_length.max(0.001),
-            to_previous.1 / previous_length.max(0.001),
-        );
-        let next_unit = (
-            to_next.0 / next_length.max(0.001),
-            to_next.1 / next_length.max(0.001),
-        );
-
-        let dot = (previous_unit.0 * next_unit.0 + previous_unit.1 * next_unit.1).clamp(-1.0, 1.0);
-        let interior_half_angle = dot.acos() * 0.5;
-        let tangent = interior_half_angle.tan().max(0.001);
-        let corner_radius = current.rounding * available;
-        let distance = (corner_radius / tangent)
-            .min(previous_length * 0.46)
-            .min(next_length * 0.46);
-
-        entries.push((
-            current.x + previous_unit.0 * distance,
-            current.y + previous_unit.1 * distance,
-        ));
-        exits.push((
-            current.x + next_unit.0 * distance,
-            current.y + next_unit.1 * distance,
-        ));
-    }
-
-    let mut path = Path::new().move_to(entries[0].0, entries[0].1);
-
-    for index in 0..vertices.len() {
-        let current = vertices[index];
-        let exit = exits[index];
-        let next_entry = entries[(index + 1) % vertices.len()];
-
-        path = path
-            .quad_to(current.x, current.y, exit.0, exit.1)
-            .line_to(next_entry.0, next_entry.1);
-    }
-
-    let path = path.close().fill(fill);
-
-    Canvas::new()
-        .width(size)
-        .height(size)
-        .shapes(vec![Box::new(path)])
-}
-
-// --------------------------------------------------
-// WALLPAPER
-// --------------------------------------------------
-
-fn wallpaper_button(theme: ThemeColors) -> Rectangle {
-    icon_button("\u{e1bc}", theme.button_surface, theme.accent).on_click(|_| {
-        match WallpaperService::next() {
-            Some(path) => {
-                println!("Wallpaper: {}", path.display());
-            }
-            None => {
-                eprintln!("Nenhum wallpaper disponível.");
-            }
-        }
-    })
-}
-
-// --------------------------------------------------
 // LIGHT / DARK
 // --------------------------------------------------
 
@@ -887,22 +729,6 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
     icon_button(icon, theme.button_surface, theme.accent).on_click(|_| {
         Theme::toggle();
     })
-}
-
-// --------------------------------------------------
-// LAUNCHER
-// --------------------------------------------------
-
-fn launcher_button(theme: ThemeColors) -> Rectangle {
-    let open = LauncherState::is_open();
-    let background = if open {
-        theme.active_surface
-    } else {
-        theme.button_surface
-    };
-    let foreground = if open { theme.active_text } else { theme.text };
-
-    icon_button("\u{e5c3}", background, foreground).on_click(|_| LauncherState::open())
 }
 
 // --------------------------------------------------
