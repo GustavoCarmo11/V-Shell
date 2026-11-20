@@ -20,7 +20,10 @@ const SPECIAL_REST_DELTA: f32 = 0.002;
 const SPECIAL_REST_SPEED: f32 = 0.02;
 const MAX_DURATION: Duration = Duration::from_millis(850);
 const SPECIAL_PULSE_DURATION: Duration = Duration::from_millis(520);
-const GROUP_HEIGHT_OMEGA: f32 = 13.0;
+// Asymmetric timing for the workspace background: it grows more gently,
+// but contracts faster when workspaces disappear.
+const GROUP_HEIGHT_GROW_OMEGA: f32 = 24.0;
+const GROUP_HEIGHT_SHRINK_OMEGA: f32 = 32.0;
 const GROUP_HEIGHT_REST_DELTA: f32 = 0.12;
 const GROUP_HEIGHT_REST_SPEED: f32 = 0.20;
 
@@ -163,15 +166,27 @@ impl SpringTrack {
     }
 
     fn retarget(&mut self, target: f32) -> bool {
-        if !target.is_finite() || (target - self.target).abs() < 0.001 {
+        let omega = self.omega;
+        self.retarget_with_omega(target, omega)
+    }
+
+    fn retarget_with_omega(&mut self, target: f32, omega: f32) -> bool {
+        if !target.is_finite()
+            || !omega.is_finite()
+            || omega <= 0.0
+            || (target - self.target).abs() < 0.001
+        {
             return false;
         }
 
+        // Sample with the previous spring parameters before changing omega,
+        // preserving both the current position and velocity across retargets.
         let current = self.sample();
         self.start = current.position;
         self.initial_velocity = current.velocity;
         self.target = target;
         self.started = Instant::now();
+        self.omega = omega;
         true
     }
 
@@ -223,7 +238,9 @@ impl SpringTrack {
 
 struct WorkspaceTransition {
     group_height: SpringTrack,
-    workspaces: HashMap<usize, BezierTrack>,
+    // Keyed by the stable Hyprland workspace ID. The filtered list's position
+    // is not stable when workspaces appear or disappear.
+    workspaces: HashMap<String, BezierTrack>,
     special: SpringTrack,
     special_active: bool,
     special_started: Option<Instant>,
@@ -236,20 +253,22 @@ impl WorkspaceTransition {
     }
 
     fn new(
-        active_index: Option<usize>,
-        workspace_count: usize,
+        active_workspace_id: Option<&str>,
+        workspace_ids: &[String],
         special_active: bool,
         group_height: f32,
     ) -> Self {
-        let workspaces = (0..workspace_count)
-            .map(|index| {
-                let progress = if !special_active && active_index == Some(index) {
-                    1.0
-                } else {
-                    0.0
-                };
+        let workspaces = workspace_ids
+            .iter()
+            .map(|workspace_id| {
+                let progress =
+                    if !special_active && active_workspace_id == Some(workspace_id.as_str()) {
+                        1.0
+                    } else {
+                        0.0
+                    };
 
-                (index, BezierTrack::resting(progress))
+                (workspace_id.clone(), BezierTrack::resting(progress))
             })
             .collect();
 
@@ -264,7 +283,7 @@ impl WorkspaceTransition {
             ),
             group_height: SpringTrack::resting(
                 group_height,
-                GROUP_HEIGHT_OMEGA,
+                GROUP_HEIGHT_GROW_OMEGA,
                 1.0,
                 GROUP_HEIGHT_REST_DELTA,
                 GROUP_HEIGHT_REST_SPEED,
@@ -276,28 +295,56 @@ impl WorkspaceTransition {
 
     fn retarget(
         &mut self,
-        active_index: Option<usize>,
-        workspace_count: usize,
+        active_workspace_id: Option<&str>,
+        workspace_ids: &[String],
         special_active: bool,
         group_height: f32,
     ) -> bool {
         let mut changed = false;
 
-        self.workspaces.retain(|index, _| *index < workspace_count);
-
-        for index in 0..workspace_count {
-            let target = if !special_active && active_index == Some(index) {
+        // Retarget tracks already known to the service by stable workspace ID.
+        // If a workspace was removed, let its track settle toward the inactive
+        // state before pruning it. This also preserves a track if that workspace
+        // briefly disappears and returns during the same transition.
+        for (workspace_id, track) in self.workspaces.iter_mut() {
+            let is_present = workspace_ids
+                .iter()
+                .any(|current_id| current_id == workspace_id);
+            let target = if is_present
+                && !special_active
+                && active_workspace_id == Some(workspace_id.as_str())
+            {
                 1.0
             } else {
                 0.0
             };
+            changed |= track.retarget(target);
+        }
 
-            if let Some(track) = self.workspaces.get_mut(&index) {
+        // A newly created workspace must begin as an inactive indicator and
+        // animate toward active when it is the focused workspace. Initializing
+        // it directly at its target made the active capsule appear abruptly.
+        for workspace_id in workspace_ids {
+            if !self.workspaces.contains_key(workspace_id) {
+                let mut track = BezierTrack::resting(0.0);
+                let target =
+                    if !special_active && active_workspace_id == Some(workspace_id.as_str()) {
+                        1.0
+                    } else {
+                        0.0
+                    };
                 changed |= track.retarget(target);
-            } else {
-                self.workspaces.insert(index, BezierTrack::resting(target));
+                self.workspaces.insert(workspace_id.clone(), track);
             }
         }
+
+        // Keep removed tracks only while their transition is still settling.
+        self.workspaces.retain(|workspace_id, track| {
+            workspace_ids
+                .iter()
+                .any(|current_id| current_id == workspace_id)
+                || !track.sample().settled
+        });
 
         if self.special_active != special_active {
             self.special_active = special_active;
@@ -310,15 +357,23 @@ impl WorkspaceTransition {
                 None
             };
         }
-        // Não reduz a altura ao entrar no special workspace.
+        // Keep the current group height while the special workspace is shown.
+        // When regular workspaces change, use different spring speeds depending
+        // on direction: expand gently, contract more quickly.
         if !special_active {
-            changed |= self.group_height.retarget(group_height);
+            let current_height = self.group_height.sample().position;
+            let omega = if group_height < current_height {
+                GROUP_HEIGHT_SHRINK_OMEGA
+            } else {
+                GROUP_HEIGHT_GROW_OMEGA
+            };
+            changed |= self.group_height.retarget_with_omega(group_height, omega);
         }
         changed
     }
 
-    fn workspace_progress(&self, index: usize) -> (f32, bool) {
-        let Some(track) = self.workspaces.get(&index) else {
+    fn workspace_progress(&self, workspace_id: &str) -> (f32, bool) {
+        let Some(track) = self.workspaces.get(workspace_id) else {
             return (0.0, false);
         };
         let sample = track.sample();
@@ -370,8 +425,8 @@ pub struct WorkspaceMotion;
 impl WorkspaceMotion {
     pub fn set_target(
         output: &str,
-        active_index: Option<usize>,
-        workspace_count: usize,
+        active_workspace_id: Option<&str>,
+        workspace_ids: &[String],
         special_active: bool,
         group_height: f32,
     ) {
@@ -382,13 +437,18 @@ impl WorkspaceMotion {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         let changed = if let Some(transition) = outputs.get_mut(output) {
-            transition.retarget(active_index, workspace_count, special_active, group_height)
+            transition.retarget(
+                active_workspace_id,
+                workspace_ids,
+                special_active,
+                group_height,
+            )
         } else {
             outputs.insert(
                 output.to_owned(),
                 WorkspaceTransition::new(
-                    active_index,
-                    workspace_count,
+                    active_workspace_id,
+                    workspace_ids,
                     special_active,
                     group_height,
                 ),
@@ -432,7 +492,7 @@ impl WorkspaceMotion {
 
     /// Returns the current active-state progress for a workspace (0..1, with
     /// the CSS curve's small overshoot retained for the shape interpolation).
-    pub fn workspace_progress(output: &str, index: usize) -> f32 {
+    pub fn workspace_progress(output: &str, workspace_id: &str) -> f32 {
         let service = WorkspaceMotionService::read();
         let outputs = service
             .outputs
@@ -443,7 +503,7 @@ impl WorkspaceMotion {
             return 0.0;
         };
 
-        let (progress, animating) = transition.workspace_progress(index);
+        let (progress, animating) = transition.workspace_progress(workspace_id);
         drop(outputs);
         drop(service);
 

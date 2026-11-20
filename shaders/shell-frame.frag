@@ -51,7 +51,7 @@ void main() {
     vec4 panel = values[2];
     float panelRadius = values[3].x;
     float progress = clamp(values[3].y, 0.0, 1.0);
-    float mergeRadius = values[3].z * smoothstep(0.0, 0.25, progress);
+    float mergeRadius = values[3].z * smoothstep(0.0, 0.0, progress);
 
     // The frame is the complement of its rounded inner opening. The viewport
     // clips the outside, so all four screen corners remain fully covered.
@@ -136,7 +136,7 @@ void main() {
             0.0
         );
 
-        float launcherMerge = values[6].z * smoothstep(0.0, 0.10, launcherProgress);
+        float launcherMerge = values[6].z * smoothstep(0.0, 0.0, launcherProgress);
         shapeDistance = smoothMin(shapeDistance, launcherDistance, launcherMerge);
     }
 

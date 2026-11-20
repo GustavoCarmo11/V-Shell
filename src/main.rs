@@ -30,7 +30,10 @@ use workspace_motion::WorkspaceMotion;
 
 const RAIL_WIDTH: f32 = 60.0;
 const WORKSPACE_INDICATOR_SIZE: f32 = 44.0;
+// Keep the original spacing between workspace indicators unchanged.
 const WORKSPACE_GAP: f32 = 3.0;
+// Extra vertical room belongs to the outer background only, not between icons.
+const WORKSPACE_GROUP_VERTICAL_PADDING: f32 = 16.0;
 const BORDER_SIZE: f32 = 10.0;
 const BORDER_RADIUS: f32 = 24.0;
 const INNER_LEFT_RADIUS: f32 = 30.0;
@@ -460,9 +463,17 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     let workspace_list = workspaces.list();
     let workspace_count = workspace_list.len();
 
-    let active_index = workspace_list
+    // Track animations by stable Hyprland workspace ID, not by their current
+    // position in the filtered list. Positions can shift when a workspace is
+    // created or removed, but the animation must stay attached to the same ID.
+    let workspace_ids: Vec<String> = workspace_list
         .iter()
-        .position(|workspace| workspace.active());
+        .map(|workspace| workspace.id().to_string())
+        .collect();
+    let active_workspace_id = workspace_list
+        .iter()
+        .find(|workspace| workspace.active())
+        .map(|workspace| workspace.id().to_string());
 
     // The group target follows the number of regular workspaces. It is kept
     // unchanged while the special workspace is visible.
@@ -473,23 +484,60 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
             + workspace_count.saturating_sub(1) as f32 * WORKSPACE_GAP
     };
 
+    // Keep a little more breathing room than the 44px workspace hit area,
+    // so the tallest active capsule never touches the outer background.
+    let workspace_group_target_height = regular_height + WORKSPACE_GROUP_VERTICAL_PADDING;
+
     WorkspaceMotion::set_target(
         output,
-        active_index,
-        workspace_count,
+        active_workspace_id.as_deref(),
+        &workspace_ids,
         special_active,
-        regular_height,
+        workspace_group_target_height,
     );
 
     let workspace_motion = WorkspaceMotion::sample(output);
-    let workspace_group_height = WorkspaceMotion::group_height(output, regular_height);
+    let workspace_group_height =
+        WorkspaceMotion::group_height(output, workspace_group_target_height);
     let special_progress = workspace_motion.special_progress;
     let regular_opacity = 1.0 - special_progress;
 
     let mut workspace_buttons: Vec<Box<dyn Widget>> = Vec::new();
+    // Stack anchors this regular-workspace layer at the top of the outer
+    // group, so apply half of the extra background padding as a base inset.
+    let mut workspace_content_offset_y = WORKSPACE_GROUP_VERTICAL_PADDING * 0.5;
+
     if special_progress < 0.999 {
-        for (index, workspace) in workspace_list.iter().enumerate() {
-            let active_progress = WorkspaceMotion::workspace_progress(output, index);
+        // Sample each animation once so the edge alignment follows the same
+        // progress values that shape the indicators below.
+        let workspace_progresses: Vec<f32> = workspace_list
+            .iter()
+            .map(|workspace| {
+                let workspace_id = workspace.id().to_string();
+                WorkspaceMotion::workspace_progress(output, &workspace_id)
+            })
+            .collect();
+
+        // Equalize the visible top and bottom margins. The base inset above
+        // centers the fixed-height column inside the padded background; this
+        // small correction compensates only for unequal first/last indicator
+        // heights. It never changes slots, inter-workspace gaps, or animation
+        // tracks, so the icons do not jump as their shapes morph.
+        if workspace_progresses.len() > 1 {
+            let first_morph = workspace_progresses[0].clamp(-0.10, 1.10);
+            let last_morph =
+                workspace_progresses[workspace_progresses.len() - 1].clamp(-0.10, 1.10);
+            let first_height = 30.0 + 10.0 * first_morph;
+            let last_height = 30.0 + 10.0 * last_morph;
+            let first_inset = (WORKSPACE_INDICATOR_SIZE - first_height) * 0.5;
+            let last_inset = (WORKSPACE_INDICATOR_SIZE - last_height) * 0.5;
+
+            workspace_content_offset_y += (last_inset - first_inset) * 0.5;
+        }
+
+        for (workspace, active_progress) in
+            workspace_list.iter().zip(workspace_progresses.into_iter())
+        {
             workspace_buttons.push(Box::new(workspace_button(
                 workspace,
                 theme,
@@ -516,11 +564,11 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
             .align_child(Center, Center)
             .child(
                 Rectangle::new()
-                    .width(36.0)
+                    .width(40.0)
                     .height(Parent)
-                    .radius(19.0)
+                    .radius(21.0)
                     .fill(theme.workspace_group_surface)
-                    .opacity(0.99),
+                    .opacity(1.0),
             ),
     ));
 
@@ -528,8 +576,10 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
         Rectangle::new()
             .width(Parent)
             .height(regular_height)
+            .align_child(Center, Center)
             .opacity(regular_opacity)
-            .child(workspace_column),
+            .child(workspace_column)
+            .translate(0.0, workspace_content_offset_y),
     ));
 
     // Keep the special-workspace star centered in the full group, without
@@ -571,8 +621,7 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
 
     // The active-window title uses the free vertical space between the
     // workspaces and the bottom action plate, like Caelestia's bar component.
-    let window_area_height =
-        (height - 12.0 - (20.0 + workspace_group_height) - 96.0).max(80.0);
+    let window_area_height = (height - 12.0 - (20.0 + workspace_group_height) - 96.0).max(80.0);
     let window_section = active_window_area(theme, window_area_height);
 
     // One shared background behind both bottom actions, using the exact
@@ -593,7 +642,7 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
         .height(96.0)
         .radius(16.0)
         .fill(theme.active_surface)
-        .opacity(0.97)
+        .opacity(0.90)
         .align_child(Center, Center)
         .child(bottom_actions);
 
@@ -647,7 +696,7 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: 
             .height(indicator_height)
             .radius(radius)
             .fill(theme.workspace_occupied_surface)
-            .opacity(0.97)
+            .opacity(1.0)
             .translate(x, y),
     ));
 
@@ -658,7 +707,7 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: 
                 .height(indicator_height)
                 .radius(radius)
                 .fill(theme.active_surface)
-                .opacity(active_opacity * 0.97)
+                .opacity(active_opacity)
                 .translate(x, y),
         ));
     }
@@ -685,9 +734,15 @@ fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
     // Caelestia rotates a single title label by 90 degrees and elides it to
     // the available vertical space. This shell keeps only the text (no icon)
     // and uses a character cap as a predictable approximation of text metrics.
-    let font_size = 12.0;
-    let max_chars = (((available_height - 16.0) / (font_size * 0.62)).floor() as usize)
-        .clamp(8, 64);
+    let font_size = 15.0;
+    // Approximate Caelestia's pixel-based TextMetrics elision: reserve a little
+    // vertical breathing room, estimate average glyph width, and cap long
+    // titles so they do not dominate the rail.
+    let text_length = (available_height - 18.0).max(font_size);
+    let estimated_glyph_width = font_size * 0.68;
+    let max_chars = (text_length / estimated_glyph_width)
+        .floor()
+        .clamp(4.0, 40.0) as usize;
     let title_label = compact_window_label(title, max_chars);
 
     // Lay out the text horizontally first, then rotate the entire line around
