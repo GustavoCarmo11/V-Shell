@@ -15,7 +15,7 @@ pub const LAUNCHER_OPEN: SpringConfig = SpringConfig {
     mass: 1.0,
     rest_delta: 0.0015,
     rest_speed: 0.02,
-    max_duration: Duration::from_millis(700),
+    max_duration: Duration::from_millis(1600),
 };
 
 /// Launcher closing is about 25% slower than the previous Launcher profile.
@@ -25,5 +25,5 @@ pub const LAUNCHER_CLOSE: SpringConfig = SpringConfig {
     mass: 1.0,
     rest_delta: 0.0015,
     rest_speed: 0.02,
-    max_duration: Duration::from_millis(700),
+    max_duration: Duration::from_millis(4600),
 };

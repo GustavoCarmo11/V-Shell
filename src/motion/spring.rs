@@ -20,7 +20,7 @@ impl SpringConfig {
             mass: 1.0,
             rest_delta: 0.0015,
             rest_speed: 0.02,
-            max_duration: Duration::from_millis(700),
+            max_duration: Duration::from_millis(1200),
         }
     }
 
@@ -34,7 +34,7 @@ impl SpringConfig {
             mass: 1.0,
             rest_delta: 0.0015,
             rest_speed: 0.02,
-            max_duration: Duration::from_millis(700),
+            max_duration: Duration::from_millis(1200),
         }
     }
 

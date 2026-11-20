@@ -1,3 +1,4 @@
+mod active_window;
 mod drawer;
 mod launcher;
 mod modules;
@@ -13,6 +14,7 @@ use amane::{
     Vertical, Widget, Workspace, Workspaces, Zone,
 };
 
+use active_window::ActiveWindow;
 use drawer::DrawerState;
 use launcher::{
     LauncherState, PANEL_BOTTOM_GAP, PANEL_HEIGHT as LAUNCHER_HEIGHT, PANEL_WIDTH as LAUNCHER_WIDTH,
@@ -28,7 +30,7 @@ use workspace_motion::WorkspaceMotion;
 
 const RAIL_WIDTH: f32 = 60.0;
 const WORKSPACE_INDICATOR_SIZE: f32 = 44.0;
-const WORKSPACE_GAP: f32 = 6.0;
+const WORKSPACE_GAP: f32 = 3.0;
 const BORDER_SIZE: f32 = 10.0;
 const BORDER_RADIUS: f32 = 24.0;
 const INNER_LEFT_RADIUS: f32 = 30.0;
@@ -43,6 +45,9 @@ const ORIGIN_HOVER_DEPTH: f32 = BORDER_SIZE + 28.0;
 // --------------------------------------------------
 
 fn main() {
+    // Subscribe to Hyprland's active-window events before the first frame.
+    let _ = ActiveWindow::current();
+
     // Start Amane's desktop-entry scan before the Launcher is first opened.
     // Apps::listen scans XDG application and icon directories asynchronously.
     let _ = Apps::read().list().len();
@@ -450,22 +455,34 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
 
 fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     let special_active = SpecialWorkspace::active_on(output);
+
     let workspaces = Workspaces::read();
     let workspace_list = workspaces.list();
     let workspace_count = workspace_list.len();
+
     let active_index = workspace_list
         .iter()
         .position(|workspace| workspace.active());
 
-    WorkspaceMotion::set_target(output, active_index, workspace_count, special_active);
-    let workspace_motion = WorkspaceMotion::sample(output);
-
+    // The group target follows the number of regular workspaces. It is kept
+    // unchanged while the special workspace is visible.
     let regular_height = if workspace_count == 0 {
         WORKSPACE_INDICATOR_SIZE
     } else {
         workspace_count as f32 * WORKSPACE_INDICATOR_SIZE
             + workspace_count.saturating_sub(1) as f32 * WORKSPACE_GAP
     };
+
+    WorkspaceMotion::set_target(
+        output,
+        active_index,
+        workspace_count,
+        special_active,
+        regular_height,
+    );
+
+    let workspace_motion = WorkspaceMotion::sample(output);
+    let workspace_group_height = WorkspaceMotion::group_height(output, regular_height);
     let special_progress = workspace_motion.special_progress;
     let regular_opacity = 1.0 - special_progress;
 
@@ -489,41 +506,49 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
         .justify(Start);
 
     let mut workspace_layers: Vec<Box<dyn Widget>> = Vec::new();
-    let regular_layer = Rectangle::new()
-        .width(Parent)
-        .height(regular_height)
-        .opacity(regular_opacity)
-        .child(workspace_column);
-    workspace_layers.push(Box::new(regular_layer));
 
-    // Material Symbols Rounded `star` is the filled glyph (not star_outline).
-    // It retains the short scale pulse and crossfade when the special
-    // workspace appears, while regular workspace buttons shrink back to circles.
+    // A subtly translucent surface expands and contracts with the workspace
+    // count. Its height is independent of the special-workspace crossfade.
+    workspace_layers.push(Box::new(
+        Rectangle::new()
+            .width(Parent)
+            .height(workspace_group_height)
+            .align_child(Center, Center)
+            .child(
+                Rectangle::new()
+                    .width(36.0)
+                    .height(Parent)
+                    .radius(19.0)
+                    .fill(theme.workspace_group_surface)
+                    .opacity(0.99),
+            ),
+    ));
+
+    workspace_layers.push(Box::new(
+        Rectangle::new()
+            .width(Parent)
+            .height(regular_height)
+            .opacity(regular_opacity)
+            .child(workspace_column),
+    ));
+
+    // Keep the special-workspace star centered in the full group, without
+    // collapsing the group's height.
     if special_progress > 0.001 {
         workspace_layers.push(Box::new(
             Rectangle::new()
-                .width(WORKSPACE_INDICATOR_SIZE)
-                .height(WORKSPACE_INDICATOR_SIZE)
+                .width(Parent)
+                .height(workspace_group_height)
                 .opacity(special_progress)
                 .align_child(Center, Center)
                 .child(
-                    Text::new("\u{e838}")
+                    Text::new("\u{f526}")
                         .font("Material Symbols Rounded")
                         .size(22.0 * workspace_motion.special_scale)
                         .color(theme.active_text),
-                )
-                .translate(2.0, 0.0),
+                ),
         ));
     }
-
-    // The workspace area contracts smoothly to a single star slot for the
-    // special workspace, without depending on an off-screen moving capsule.
-    let workspace_group_height = (WORKSPACE_INDICATOR_SIZE
-        + (regular_height - WORKSPACE_INDICATOR_SIZE) * regular_opacity)
-        .clamp(
-            WORKSPACE_INDICATOR_SIZE,
-            regular_height.max(WORKSPACE_INDICATOR_SIZE),
-        );
 
     let workspace_group = Rectangle::new()
         .width(Parent)
@@ -535,33 +560,42 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
                 .height(workspace_group_height),
         );
 
-    // Workspaces stay at the top, the central slot is reserved for active
-    // window metadata, and the remaining shell actions stay grouped below.
     let workspace_section = Column::new(vec![
-        // Keep the workspace stack a little below the top edge of the rail.
-        // The spacer remains outside the animated workspace group.
         Box::new(Rectangle::new().width(1.0).height(10.0)),
         Box::new(workspace_group),
-        Box::new(divider(theme)),
     ])
     .width(Parent)
     .gap(10.0)
     .align(Center)
     .justify(Start);
 
-    let window_section = active_window_area(theme);
+    // The active-window title uses the free vertical space between the
+    // workspaces and the bottom action plate, like Caelestia's bar component.
+    let window_area_height =
+        (height - 12.0 - (20.0 + workspace_group_height) - 96.0).max(80.0);
+    let window_section = active_window_area(theme, window_area_height);
 
-    let bottom_section = Column::new(vec![
-        Box::new(home_button(theme)),
-        Box::new(divider(theme)),
+    // One shared background behind both bottom actions, using the exact
+    // surface colour of the active workspace indicator. Individual buttons
+    // remain transparent.
+    let bottom_actions = Column::new(vec![
         Box::new(theme_button(theme)),
-        Box::new(divider(theme)),
         Box::new(session_button(theme)),
     ])
     .width(Parent)
-    .gap(6.0)
+    .height(Parent)
+    .gap(7.0)
     .align(Center)
-    .justify(End);
+    .justify(Center);
+
+    let bottom_section = Rectangle::new()
+        .width(36.0)
+        .height(96.0)
+        .radius(16.0)
+        .fill(theme.active_surface)
+        .opacity(0.97)
+        .align_child(Center, Center)
+        .child(bottom_actions);
 
     Rectangle::new()
         .width(RAIL_WIDTH)
@@ -569,15 +603,22 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
         .padding(6.0)
         .align_child(Center, Center)
         .child(
-            Column::new(vec![
-                Box::new(workspace_section),
-                Box::new(window_section),
-                Box::new(bottom_section),
-            ])
-            .width(Parent)
-            .height(Parent)
-            .align(Center)
-            .justify(SpaceBetween),
+            Rectangle::new()
+                .width(Parent)
+                .height(Parent)
+                .child(
+                    Column::new(vec![
+                        Box::new(workspace_section),
+                        Box::new(window_section),
+                        Box::new(bottom_section),
+                    ])
+                    .width(Parent)
+                    .height(Parent)
+                    .align(Center)
+                    .justify(SpaceBetween),
+                )
+                // The content was a couple of pixels right of the visual center.
+                .translate(-2.0, 0.0),
         )
 }
 
@@ -587,66 +628,38 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
 
 fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: f32) -> Rectangle {
     let id = workspace.id();
-    let label = workspace
-        .name()
-        .map(str::to_owned)
-        .unwrap_or_else(|| workspace.index().to_string());
 
-    // Preserve the small CSS overshoot for the geometry, while keeping
-    // opacity in its valid 0..1 range.
+    // Keep the existing Waybar-inspired morph, but make the indicators
+    // narrower and remove their numeric labels entirely.
     let morph = active_progress.clamp(-0.10, 1.10);
     let active_opacity = active_progress.clamp(0.0, 1.0);
-    let width = 32.0 + 2.0 * morph;
-    let height = 32.0 + 10.0 * morph;
-    let radius = height * 0.5;
+    let width = 14.0 + 3.0 * morph;
+    let indicator_height = 30.0 + 10.0 * morph;
+    let radius = indicator_height * 0.5;
     let x = (WORKSPACE_INDICATOR_SIZE - width) * 0.5;
-    let y = (WORKSPACE_INDICATOR_SIZE - height) * 0.5;
+    let y = (WORKSPACE_INDICATOR_SIZE - indicator_height) * 0.5;
 
     let mut layers: Vec<Box<dyn Widget>> = Vec::new();
 
-    // Inactive circle surface. This uses Material 3's highest container role
-    // at full opacity, so it remains clearly separated from the rail.
     layers.push(Box::new(
         Rectangle::new()
             .width(width)
-            .height(height)
+            .height(indicator_height)
             .radius(radius)
             .fill(theme.workspace_occupied_surface)
+            .opacity(0.97)
             .translate(x, y),
     ));
 
-    // Crossfade the active surface over the same interpolated outline. This
-    // animates the background color just like the CSS `background-color`.
     if active_opacity > 0.001 {
         layers.push(Box::new(
             Rectangle::new()
                 .width(width)
-                .height(height)
+                .height(indicator_height)
                 .radius(radius)
                 .fill(theme.active_surface)
-                .opacity(active_opacity)
+                .opacity(active_opacity * 0.97)
                 .translate(x, y),
-        ));
-    }
-
-    // Text color follows the same CSS progress, fading from the inactive
-    // foreground to the active foreground without changing its alignment.
-    layers.push(Box::new(
-        Rectangle::new()
-            .width(Parent)
-            .height(Parent)
-            .align_child(Center, Center)
-            .child(Text::new(label.clone()).size(15.0).color(theme.text)),
-    ));
-
-    if active_opacity > 0.001 {
-        layers.push(Box::new(
-            Rectangle::new()
-                .width(Parent)
-                .height(Parent)
-                .opacity(active_opacity)
-                .align_child(Center, Center)
-                .child(Text::new(label).size(15.0).color(theme.active_text)),
         ));
     }
 
@@ -661,59 +674,75 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: 
         })
 }
 
-// A compact placeholder for future active-window metadata.
-fn active_window_area(theme: ThemeColors) -> Rectangle {
-    Rectangle::new()
-        .width(44.0)
-        .height(76.0)
-        .radius(15.0)
-        .fill(theme.button_surface)
+fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
+    let window = ActiveWindow::current();
+    let title = window
+        .as_ref()
+        .map(|window| window.title.as_str())
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or("Desktop");
+
+    // Caelestia rotates a single title label by 90 degrees and elides it to
+    // the available vertical space. This shell keeps only the text (no icon)
+    // and uses a character cap as a predictable approximation of text metrics.
+    let font_size = 12.0;
+    let max_chars = (((available_height - 16.0) / (font_size * 0.62)).floor() as usize)
+        .clamp(8, 64);
+    let title_label = compact_window_label(title, max_chars);
+
+    // Lay out the text horizontally first, then rotate the entire line around
+    // its center so the visible text runs vertically along the rail.
+    let rotated_line = Rectangle::new()
+        .width(available_height)
+        .height(48.0)
+        .fill(Color::TRANSPARENT)
         .align_child(Center, Center)
-        .child(
-            Column::new(vec![
-                Box::new(
-                    Text::new("\u{e8f4}")
-                        .font("Material Symbols Rounded")
-                        .size(19.0)
-                        .color(theme.muted),
-                ),
-                Box::new(Text::new("Janela").size(9.0).color(theme.muted)),
-                Box::new(Text::new("ativa").size(9.0).color(theme.muted)),
-            ])
-            .align(Center)
-            .justify(Center)
-            .gap(3.0),
-        )
+        .child(Text::new(title_label).size(font_size).color(theme.text))
+        .rotate(90.0);
+
+    Rectangle::new()
+        .width(Parent)
+        .height(available_height)
+        .fill(Color::TRANSPARENT)
+        .clip()
+        .align_child(Center, Center)
+        .child(rotated_line)
+}
+
+fn compact_window_label(value: &str, max_chars: usize) -> String {
+    let value = value.trim();
+    let chars: Vec<char> = value.chars().collect();
+
+    if chars.len() <= max_chars {
+        return value.to_owned();
+    }
+
+    let mut result: String = chars
+        .iter()
+        .take(max_chars.saturating_sub(3))
+        .copied()
+        .collect();
+    result.push_str("...");
+    result
 }
 
 // --------------------------------------------------
 // ICON BUTTON
 // --------------------------------------------------
 
-fn icon_button(icon: &'static str, background: Color, foreground: Color) -> Rectangle {
+fn icon_button(icon: &'static str, foreground: Color) -> Rectangle {
     Rectangle::new()
-        .width(38.0)
+        .width(32.0)
         .height(38.0)
-        .radius(13.0)
-        .fill(background)
+        .fill(Color::TRANSPARENT)
         .cursor(Pointer)
         .align_child(Center, Center)
         .child(
             Text::new(icon)
                 .font("Material Symbols Rounded")
-                .size(21.0)
+                .size(19.0)
                 .color(foreground),
         )
-}
-
-// --------------------------------------------------
-// HOME
-// --------------------------------------------------
-
-fn home_button(theme: ThemeColors) -> Rectangle {
-    icon_button("\u{e9b2}", theme.button_surface, theme.muted).on_click(|_| {
-        println!("caelestia-rs: home");
-    })
 }
 
 // --------------------------------------------------
@@ -726,7 +755,7 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
         ThemeMode::Light => "\u{e51c}",
     };
 
-    icon_button(icon, theme.button_surface, theme.accent).on_click(|_| {
+    icon_button(icon, theme.active_text).on_click(|_| {
         Theme::toggle();
     })
 }
@@ -736,15 +765,7 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
 // --------------------------------------------------
 
 fn session_button(theme: ThemeColors) -> Rectangle {
-    icon_button("\u{f8c7}", theme.button_surface, theme.text).on_click(|_| {
+    icon_button("\u{f8c7}", theme.active_text).on_click(|_| {
         println!("caelestia-rs: session");
     })
-}
-
-// --------------------------------------------------
-// DIVIDER
-// --------------------------------------------------
-
-fn divider(theme: ThemeColors) -> Rectangle {
-    Rectangle::new().width(22.0).height(1.0).fill(theme.divider)
 }

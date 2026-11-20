@@ -69,20 +69,13 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
 
     let header = header(&files, selected_index, theme);
     let carousel = carousel(previous, selected.clone(), next, current.as_ref(), theme);
-    let footer = footer(
-        selected.clone(),
-        current.as_ref() == Some(&selected),
-        selected_index,
-        files.len(),
-        theme,
-    );
 
     Rectangle::new()
         .width(CONTENT_WIDTH)
         .height(CONTENT_HEIGHT)
         .fill(Color::TRANSPARENT)
         .child(
-            Column::new(vec![Box::new(header), Box::new(carousel), Box::new(footer)])
+            Column::new(vec![Box::new(header), Box::new(carousel)])
                 .width(Parent)
                 .height(Parent)
                 .gap(12.0)
@@ -101,15 +94,9 @@ fn header(files: &[PathBuf], selected_index: usize, theme: ThemeColors) -> Recta
         directory.display().to_string()
     };
 
-    let title = Column::new(vec![
-        Box::new(Text::new("PAPÉIS DE PAREDE").size(13.0).color(theme.text)),
-        Box::new(
-            Text::new(directory_label)
-                .size(10.0)
-                .color(theme.muted)
-                .elide(),
-        ),
-    ])
+    let title = Column::new(vec![Box::new(
+        Text::new("Wallpapers").size(17.0).color(theme.text),
+    )])
     .gap(3.0)
     .justify(Center);
 
@@ -255,11 +242,6 @@ fn wallpaper_card(
         .and_then(|name| name.to_str())
         .unwrap_or("Wallpaper")
         .to_owned();
-    let label = if current {
-        format!("{} · ATUAL", filename)
-    } else {
-        filename
-    };
 
     let overlay = Rectangle::new()
         .width(Parent)
@@ -268,8 +250,7 @@ fn wallpaper_card(
         .fill(theme.bar_surface)
         .opacity(0.88)
         .translate(0.0, height - 34.0)
-        .align_child(Center, Center)
-        .child(Text::new(label).size(10.0).color(theme.text).elide());
+        .align_child(Center, Center);
 
     let image = Rectangle::new()
         .width(width)
@@ -292,88 +273,6 @@ fn wallpaper_card(
     } else {
         image.opacity(0.76)
     }
-}
-
-fn footer(
-    selected: PathBuf,
-    is_current: bool,
-    selected_index: usize,
-    total: usize,
-    theme: ThemeColors,
-) -> Rectangle {
-    let filename = selected
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("Wallpaper")
-        .to_owned();
-    let status = if is_current {
-        "Este wallpaper já está aplicado".to_owned()
-    } else {
-        "Prévia selecionada · aplique para confirmar".to_owned()
-    };
-
-    let selected_for_apply = selected.clone();
-    let apply = Rectangle::new()
-        .width(126.0)
-        .height(40.0)
-        .radius(14.0)
-        .fill(if is_current {
-            theme.button_surface
-        } else {
-            theme.active_surface
-        })
-        .cursor(Pointer)
-        .align_child(Center, Center)
-        .child(
-            Text::new(if is_current { "EM USO" } else { "APLICAR" })
-                .size(11.0)
-                .color(if is_current {
-                    theme.muted
-                } else {
-                    theme.active_text
-                }),
-        )
-        .on_click(move |_| {
-            if let Some(path) = WallpaperService::select(&selected_for_apply) {
-                WallpaperPickerState::write().selected = Some(path.clone());
-                println!("Wallpaper aplicado: {}", path.display());
-            }
-        });
-
-    let previous = navigation_button("\u{e5cb}", theme, || move_selection(-1));
-    let next = navigation_button("\u{e5cc}", theme, || move_selection(1));
-    let controls = Row::new(vec![Box::new(previous), Box::new(next), Box::new(apply)])
-        .height(40.0)
-        .gap(8.0)
-        .align(Center);
-
-    Rectangle::new()
-        .width(CONTENT_WIDTH)
-        .height(48.0)
-        .fill(Color::TRANSPARENT)
-        .child(
-            Row::new(vec![
-                Box::new(
-                    Column::new(vec![
-                        Box::new(Text::new(filename).size(14.0).color(theme.text).elide()),
-                        Box::new(Text::new(status).size(10.0).color(theme.muted).elide()),
-                        Box::new(
-                            Text::new(format!("{:02} / {:02}", selected_index + 1, total))
-                                .size(9.0)
-                                .color(theme.muted),
-                        ),
-                    ])
-                    .gap(2.0)
-                    .justify(Center),
-                ),
-                Box::new(controls),
-            ])
-            .width(Parent)
-            .height(Parent)
-            .gap(12.0)
-            .align(Center)
-            .justify(SpaceBetween),
-        )
 }
 
 fn navigation_button(

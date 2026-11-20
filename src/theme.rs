@@ -23,6 +23,7 @@ pub struct ThemeColors {
     // Surfaces
     pub bar_surface: Color,
     pub button_surface: Color,
+    pub workspace_group_surface: Color,
     pub workspace_occupied_surface: Color,
     pub active_surface: Color,
 
@@ -46,6 +47,7 @@ pub struct Theme {
     // Surfaces
     bar_surface: Animation<Color>,
     button_surface: Animation<Color>,
+    workspace_group_surface: Animation<Color>,
     workspace_occupied_surface: Animation<Color>,
     active_surface: Animation<Color>,
 
@@ -103,12 +105,28 @@ impl ThemeColors {
         Self {
             mode,
 
-            bar_surface: palette_color(&contents, &key("surface"), fallback.bar_surface, 215),
+            // Use the lowest neutral container as the rail base. This anchors
+            // the bar to a darker/lighter endpoint and leaves more separation
+            // for the workspace surfaces above it.
+            bar_surface: palette_color(
+                &contents,
+                &key("surface_container_lowest"),
+                fallback.bar_surface,
+                248,
+            ),
 
             button_surface: palette_color(
                 &contents,
                 &key("surface_container"),
                 fallback.button_surface,
+                255,
+            ),
+
+            // A dedicated intermediate surface for the workspace capsule.
+            workspace_group_surface: palette_color(
+                &contents,
+                &key("surface_container_high"),
+                fallback.workspace_group_surface,
                 255,
             ),
 
@@ -154,8 +172,9 @@ impl ThemeColors {
             ThemeMode::Dark => Self {
                 mode,
 
-                bar_surface: Color::rgba(24, 24, 37, 215),
+                bar_surface: Color::rgba(13, 14, 23, 248),
                 button_surface: Color::rgb(49, 50, 68),
+                workspace_group_surface: Color::rgb(61, 64, 84),
                 workspace_occupied_surface: Color::rgb(85, 88, 106),
                 active_surface: Color::rgb(69, 71, 90),
 
@@ -170,8 +189,9 @@ impl ThemeColors {
             ThemeMode::Light => Self {
                 mode,
 
-                bar_surface: Color::rgba(239, 241, 245, 215),
+                bar_surface: Color::rgba(250, 250, 253, 248),
                 button_surface: Color::rgb(220, 224, 232),
+                workspace_group_surface: Color::rgb(207, 211, 224),
                 workspace_occupied_surface: Color::rgb(192, 196, 210),
                 active_surface: Color::rgb(204, 208, 218),
 
@@ -200,6 +220,7 @@ impl Theme {
 
             bar_surface: theme.bar_surface.value(),
             button_surface: theme.button_surface.value(),
+            workspace_group_surface: theme.workspace_group_surface.value(),
             workspace_occupied_surface: theme.workspace_occupied_surface.value(),
             active_surface: theme.active_surface.value(),
 
@@ -217,6 +238,12 @@ impl Theme {
         retarget_color(&mut self.bar_surface, colors.bar_surface, duration);
 
         retarget_color(&mut self.button_surface, colors.button_surface, duration);
+
+        retarget_color(
+            &mut self.workspace_group_surface,
+            colors.workspace_group_surface,
+            duration,
+        );
 
         retarget_color(
             &mut self.workspace_occupied_surface,
@@ -292,6 +319,7 @@ impl Service for Theme {
 
             bar_surface: animated_color(colors.bar_surface),
             button_surface: animated_color(colors.button_surface),
+            workspace_group_surface: animated_color(colors.workspace_group_surface),
             workspace_occupied_surface: animated_color(colors.workspace_occupied_surface),
             active_surface: animated_color(colors.active_surface),
 

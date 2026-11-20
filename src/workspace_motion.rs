@@ -20,6 +20,9 @@ const SPECIAL_REST_DELTA: f32 = 0.002;
 const SPECIAL_REST_SPEED: f32 = 0.02;
 const MAX_DURATION: Duration = Duration::from_millis(850);
 const SPECIAL_PULSE_DURATION: Duration = Duration::from_millis(520);
+const GROUP_HEIGHT_OMEGA: f32 = 13.0;
+const GROUP_HEIGHT_REST_DELTA: f32 = 0.12;
+const GROUP_HEIGHT_REST_SPEED: f32 = 0.20;
 
 #[derive(Clone, Copy, Debug)]
 pub struct WorkspaceMotionSample {
@@ -219,6 +222,7 @@ impl SpringTrack {
 }
 
 struct WorkspaceTransition {
+    group_height: SpringTrack,
     workspaces: HashMap<usize, BezierTrack>,
     special: SpringTrack,
     special_active: bool,
@@ -226,7 +230,17 @@ struct WorkspaceTransition {
 }
 
 impl WorkspaceTransition {
-    fn new(active_index: Option<usize>, workspace_count: usize, special_active: bool) -> Self {
+    fn sample_group_height(&self) -> (f32, bool) {
+        let sample = self.group_height.sample();
+        (sample.position, !sample.settled)
+    }
+
+    fn new(
+        active_index: Option<usize>,
+        workspace_count: usize,
+        special_active: bool,
+        group_height: f32,
+    ) -> Self {
         let workspaces = (0..workspace_count)
             .map(|index| {
                 let progress = if !special_active && active_index == Some(index) {
@@ -234,6 +248,7 @@ impl WorkspaceTransition {
                 } else {
                     0.0
                 };
+
                 (index, BezierTrack::resting(progress))
             })
             .collect();
@@ -247,6 +262,13 @@ impl WorkspaceTransition {
                 SPECIAL_REST_DELTA,
                 SPECIAL_REST_SPEED,
             ),
+            group_height: SpringTrack::resting(
+                group_height,
+                GROUP_HEIGHT_OMEGA,
+                1.0,
+                GROUP_HEIGHT_REST_DELTA,
+                GROUP_HEIGHT_REST_SPEED,
+            ),
             special_active,
             special_started: None,
         }
@@ -257,6 +279,7 @@ impl WorkspaceTransition {
         active_index: Option<usize>,
         workspace_count: usize,
         special_active: bool,
+        group_height: f32,
     ) -> bool {
         let mut changed = false;
 
@@ -287,7 +310,10 @@ impl WorkspaceTransition {
                 None
             };
         }
-
+        // Não reduz a altura ao entrar no special workspace.
+        if !special_active {
+            changed |= self.group_height.retarget(group_height);
+        }
         changed
     }
 
@@ -347,6 +373,7 @@ impl WorkspaceMotion {
         active_index: Option<usize>,
         workspace_count: usize,
         special_active: bool,
+        group_height: f32,
     ) {
         let service = WorkspaceMotionService::read();
         let mut outputs = service
@@ -355,11 +382,16 @@ impl WorkspaceMotion {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         let changed = if let Some(transition) = outputs.get_mut(output) {
-            transition.retarget(active_index, workspace_count, special_active)
+            transition.retarget(active_index, workspace_count, special_active, group_height)
         } else {
             outputs.insert(
                 output.to_owned(),
-                WorkspaceTransition::new(active_index, workspace_count, special_active),
+                WorkspaceTransition::new(
+                    active_index,
+                    workspace_count,
+                    special_active,
+                    group_height,
+                ),
             );
             false
         };
@@ -370,6 +402,32 @@ impl WorkspaceMotion {
         if changed {
             request_frame();
         }
+    }
+
+    /// Returns the current animated height of the workspace group.
+    ///
+    /// The fallback is used before this output has received its first target.
+    pub fn group_height(output: &str, fallback: f32) -> f32 {
+        let service = WorkspaceMotionService::read();
+        let outputs = service
+            .outputs
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        let Some(transition) = outputs.get(output) else {
+            return fallback;
+        };
+
+        let (height, animating) = transition.sample_group_height();
+
+        drop(outputs);
+        drop(service);
+
+        if animating {
+            request_frame();
+        }
+
+        height
     }
 
     /// Returns the current active-state progress for a workspace (0..1, with
