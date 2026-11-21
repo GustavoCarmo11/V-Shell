@@ -125,7 +125,7 @@ impl ThemeColors {
             // A dedicated intermediate surface for the workspace capsule.
             workspace_group_surface: palette_color(
                 &contents,
-                &key("surface_container_high"),
+                &key("surface_container"),
                 fallback.workspace_group_surface,
                 255,
             ),
@@ -174,7 +174,7 @@ impl ThemeColors {
 
                 bar_surface: Color::rgba(13, 14, 23, 248),
                 button_surface: Color::rgb(49, 50, 68),
-                workspace_group_surface: Color::rgb(61, 64, 84),
+                workspace_group_surface: Color::rgb(49, 50, 68),
                 workspace_occupied_surface: Color::rgb(85, 88, 106),
                 active_surface: Color::rgb(69, 71, 90),
 
@@ -191,7 +191,7 @@ impl ThemeColors {
 
                 bar_surface: Color::rgba(250, 250, 253, 248),
                 button_surface: Color::rgb(220, 224, 232),
-                workspace_group_surface: Color::rgb(207, 211, 224),
+                workspace_group_surface: Color::rgb(220, 224, 232),
                 workspace_occupied_surface: Color::rgb(192, 196, 210),
                 active_surface: Color::rgb(204, 208, 218),
 

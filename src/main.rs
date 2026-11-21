@@ -641,8 +641,8 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
         .width(36.0)
         .height(96.0)
         .radius(16.0)
-        .fill(theme.active_surface)
-        .opacity(0.90)
+        .fill(theme.workspace_group_surface)
+        .opacity(1.0)
         .align_child(Center, Center)
         .child(bottom_actions);
 
@@ -734,7 +734,7 @@ fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
     // Caelestia rotates a single title label by 90 degrees and elides it to
     // the available vertical space. This shell keeps only the text (no icon)
     // and uses a character cap as a predictable approximation of text metrics.
-    let font_size = 15.0;
+    let font_size = 17.0;
     // Approximate Caelestia's pixel-based TextMetrics elision: reserve a little
     // vertical breathing room, estimate average glyph width, and cap long
     // titles so they do not dominate the rail.
@@ -752,7 +752,7 @@ fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
         .height(48.0)
         .fill(Color::TRANSPARENT)
         .align_child(Center, Center)
-        .child(Text::new(title_label).size(font_size).color(theme.text))
+        .child(Text::new(title_label).size(font_size).color(theme.accent))
         .rotate(90.0);
 
     Rectangle::new()
@@ -810,7 +810,7 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
         ThemeMode::Light => "\u{e51c}",
     };
 
-    icon_button(icon, theme.active_text).on_click(|_| {
+    icon_button(icon, theme.text).on_click(|_| {
         Theme::toggle();
     })
 }
@@ -820,7 +820,7 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
 // --------------------------------------------------
 
 fn session_button(theme: ThemeColors) -> Rectangle {
-    icon_button("\u{f8c7}", theme.active_text).on_click(|_| {
+    icon_button("\u{f8c7}", theme.text).on_click(|_| {
         println!("caelestia-rs: session");
     })
 }
