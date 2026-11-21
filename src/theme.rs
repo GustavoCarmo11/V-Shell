@@ -112,7 +112,7 @@ impl ThemeColors {
                 &contents,
                 &key("surface_container_lowest"),
                 fallback.bar_surface,
-                248,
+                255,
             ),
 
             button_surface: palette_color(
@@ -172,7 +172,7 @@ impl ThemeColors {
             ThemeMode::Dark => Self {
                 mode,
 
-                bar_surface: Color::rgba(13, 14, 23, 248),
+                bar_surface: Color::rgba(13, 14, 23, 255),
                 button_surface: Color::rgb(49, 50, 68),
                 workspace_group_surface: Color::rgb(49, 50, 68),
                 workspace_occupied_surface: Color::rgb(85, 88, 106),
@@ -189,7 +189,7 @@ impl ThemeColors {
             ThemeMode::Light => Self {
                 mode,
 
-                bar_surface: Color::rgba(250, 250, 253, 248),
+                bar_surface: Color::rgba(250, 250, 253, 255),
                 button_surface: Color::rgb(220, 224, 232),
                 workspace_group_surface: Color::rgb(220, 224, 232),
                 workspace_occupied_surface: Color::rgb(192, 196, 210),

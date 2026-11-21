@@ -743,16 +743,55 @@ fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
     let max_chars = (text_length / estimated_glyph_width)
         .floor()
         .clamp(4.0, 40.0) as usize;
-    let title_label = compact_window_label(title, max_chars);
+    let (previous_title, title_progress) = ActiveWindow::title_transition();
+    let incoming_opacity = title_progress.clamp(0.0, 1.0);
+    let outgoing_opacity = 1.0 - incoming_opacity;
 
-    // Lay out the text horizontally first, then rotate the entire line around
-    // its center so the visible text runs vertically along the rail.
+    // Crossfade the old and new labels in the same fixed layout slot. The
+    // transition is short, so rapid focus changes do not leave stale text.
+    let mut title_layers: Vec<Box<dyn Widget>> = Vec::new();
+
+    if let Some(previous_title) = previous_title {
+        if outgoing_opacity > 0.001 {
+            let previous_label = compact_window_label(&previous_title, max_chars);
+            title_layers.push(Box::new(
+                Rectangle::new()
+                    .width(available_height)
+                    .height(48.0)
+                    .fill(Color::TRANSPARENT)
+                    .opacity(outgoing_opacity)
+                    .align_child(Center, Center)
+                    .child(
+                        Text::new(previous_label)
+                            .size(font_size)
+                            .color(theme.accent),
+                    ),
+            ));
+        }
+    }
+
+    let title_label = compact_window_label(title, max_chars);
+    title_layers.push(Box::new(
+        Rectangle::new()
+            .width(available_height)
+            .height(48.0)
+            .fill(Color::TRANSPARENT)
+            .opacity(incoming_opacity)
+            .align_child(Center, Center)
+            .child(Text::new(title_label).size(font_size).color(theme.accent)),
+    ));
+
+    // Lay out both labels in one fixed slot, then rotate them together so
+    // their crossfade cannot shift the vertical alignment of the title.
     let rotated_line = Rectangle::new()
         .width(available_height)
         .height(48.0)
         .fill(Color::TRANSPARENT)
-        .align_child(Center, Center)
-        .child(Text::new(title_label).size(font_size).color(theme.accent))
+        .child(
+            Stack::new(title_layers)
+                .width(available_height)
+                .height(48.0),
+        )
         .rotate(90.0);
 
     Rectangle::new()

@@ -278,7 +278,7 @@ fn wallpaper_card(
         .height(34.0)
         .radius(0.0)
         .fill(theme.bar_surface)
-        .opacity(0.88)
+        .opacity(0.98)
         .translate(0.0, height - 34.0)
         .align_child(Center, Center)
         .child(Text::new(label).size(10.0).color(theme.text).elide());

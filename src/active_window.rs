@@ -3,9 +3,10 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     os::unix::net::UnixStream,
     path::PathBuf,
+    time::Duration,
 };
 
-use amane::Service;
+use amane::{Animation, Easing, Service};
 use serde_json::Value;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,11 +18,30 @@ pub struct ActiveWindowInfo {
 #[derive(Default)]
 pub struct ActiveWindow {
     current: Option<ActiveWindowInfo>,
+    previous_title: Option<String>,
+    title_transition: Option<Animation<f32>>,
 }
 
 impl ActiveWindow {
     pub fn current() -> Option<ActiveWindowInfo> {
         Self::read().current.clone()
+    }
+
+    /// Returns the outgoing title and the incoming title's crossfade progress.
+    pub fn title_transition() -> (Option<String>, f32) {
+        let active = Self::read();
+        let Some(animation) = active.title_transition.as_ref() else {
+            return (None, 1.0);
+        };
+
+        let progress = animation.value().clamp(0.0, 1.0);
+        let previous_title = if progress < 1.0 {
+            active.previous_title.clone()
+        } else {
+            None
+        };
+
+        (previous_title, progress)
     }
 
     fn socket_path(name: &str) -> Option<PathBuf> {
@@ -74,11 +94,37 @@ impl ActiveWindow {
     }
 
     fn set_current(next: Option<ActiveWindowInfo>) {
-        let changed = Self::read().current != next;
-
-        if changed {
-            Self::write().current = next;
+        if Self::read().current == next {
+            return;
         }
+
+        let mut active = Self::write();
+
+        if active.current == next {
+            return;
+        }
+
+        let previous_title = Self::display_title(active.current.as_ref());
+        let next_title = Self::display_title(next.as_ref());
+
+        if previous_title != next_title {
+            active.previous_title = Some(previous_title.to_owned());
+
+            let mut transition = Animation::new(0.0)
+                .duration(Duration::from_millis(180))
+                .easing(Easing::InOut);
+            transition.to(1.0);
+            active.title_transition = Some(transition);
+        }
+
+        active.current = next;
+    }
+
+    fn display_title(window: Option<&ActiveWindowInfo>) -> &str {
+        window
+            .map(|window| window.title.as_str())
+            .filter(|title| !title.trim().is_empty())
+            .unwrap_or("Desktop")
     }
 
     fn apply_event(event: &str) {
