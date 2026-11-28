@@ -13,16 +13,16 @@ pub struct RailBattery {
     pub charging: bool,
 }
 
+impl RailBattery {
+    pub fn snapshot() -> Self {
+        BatteryMonitor::read().battery
+    }
+}
+
 #[derive(Default)]
 struct BatteryMonitor {
     path: Option<PathBuf>,
     battery: RailBattery,
-}
-
-impl BatteryMonitor {
-    pub fn snapshot() -> RailBattery {
-        Self::read().battery
-    }
 }
 
 impl Service for BatteryMonitor {

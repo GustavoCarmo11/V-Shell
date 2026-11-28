@@ -7,7 +7,7 @@ mod wallpapers;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use amane::{Center, Color, Column, Parent, Pointer, Rectangle, Row, Service, Text};
+use amane::{Center, Color, Column, Parent, Pointer, Rectangle, Row, Service};
 
 use crate::material::{
     self, icon as material_icon, shape as material_shape, space as material_space,

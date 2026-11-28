@@ -35,14 +35,16 @@ use wallpaper::WallpaperService;
 use workspace_motion::WorkspaceMotion;
 
 const RAIL_WIDTH: f32 = 60.0;
+const UI_FONT: &str = "Rubik";
 const WORKSPACE_INDICATOR_SIZE: f32 = 44.0;
 // Keep the original spacing between workspace indicators unchanged.
 const WORKSPACE_GAP: f32 = 3.0;
 // Extra vertical room belongs to the outer background only, not between icons.
 const WORKSPACE_GROUP_VERTICAL_PADDING: f32 = 16.0;
 const BOTTOM_ACTIONS_HEIGHT: f32 = 132.0;
-const BOTTOM_CLOCK_HEIGHT: f32 = 42.0;
-const BOTTOM_SECTION_HEIGHT: f32 = BOTTOM_ACTIONS_HEIGHT + BOTTOM_CLOCK_HEIGHT + 8.0;
+const BOTTOM_CLOCK_HEIGHT: f32 = 48.0;
+const BOTTOM_CLOCK_GAP: f32 = 28.0;
+const BOTTOM_SECTION_HEIGHT: f32 = BOTTOM_ACTIONS_HEIGHT + BOTTOM_CLOCK_HEIGHT + BOTTOM_CLOCK_GAP;
 const BORDER_SIZE: f32 = 14.0;
 const BORDER_RADIUS: f32 = 24.0;
 const INNER_LEFT_RADIUS: f32 = 30.0;
@@ -65,7 +67,7 @@ fn main() {
     let _ = Apps::read().list().len();
 
     App::new()
-        .font("Rubik")
+        .font(UI_FONT)
         .window_per_monitor(background)
         // Quatro exclusões invisíveis: esquerda (rail), topo, direita e base.
         .window_per_monitor(exclusion_left)
@@ -539,8 +541,8 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
             let first_morph = workspace_progresses[0].clamp(-0.10, 1.10);
             let last_morph =
                 workspace_progresses[workspace_progresses.len() - 1].clamp(-0.10, 1.10);
-            let first_height = 24.0 + 16.0 * first_morph;
-            let last_height = 24.0 + 16.0 * last_morph;
+            let first_height = 30.0 + 6.0 * first_morph;
+            let last_height = 30.0 + 6.0 * last_morph;
             let first_inset = (WORKSPACE_INDICATOR_SIZE - first_height) * 0.5;
             let last_inset = (WORKSPACE_INDICATOR_SIZE - last_height) * 0.5;
 
@@ -671,7 +673,7 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     ])
     .width(Parent)
     .height(BOTTOM_SECTION_HEIGHT)
-    .gap(material_space::SM)
+    .gap(BOTTOM_CLOCK_GAP)
     .align(Center)
     .justify(Center);
 
@@ -711,8 +713,8 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: 
     // and wider while retaining the same capsule shape.
     let morph = active_progress.clamp(-0.10, 1.10);
     let active_opacity = active_progress.clamp(0.0, 1.0);
-    let width = 12.0 + 4.0 * morph;
-    let indicator_height = 24.0 + 12.0 * morph;
+    let width = 16.0 + 2.0 * morph;
+    let indicator_height = 30.0 + 6.0 * morph;
     let radius = indicator_height * 0.5;
     let x = (WORKSPACE_INDICATOR_SIZE - width) * 0.5;
     let y = (WORKSPACE_INDICATOR_SIZE - indicator_height) * 0.5;
@@ -792,6 +794,7 @@ fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
                     .align_child(Center, Center)
                     .child(
                         Text::new(previous_label)
+                            .font(UI_FONT)
                             .size(font_size)
                             .color(theme.accent),
                     ),
@@ -807,7 +810,12 @@ fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
             .fill(Color::TRANSPARENT)
             .opacity(incoming_opacity)
             .align_child(Center, Center)
-            .child(Text::new(title_label).size(font_size).color(theme.accent)),
+            .child(
+                Text::new(title_label)
+                    .font(UI_FONT)
+                    .size(font_size)
+                    .color(theme.accent),
+            ),
     ));
 
     // Lay out both labels in one fixed slot, then rotate them together so
@@ -929,9 +937,19 @@ fn rail_clock(theme: ThemeColors) -> Rectangle {
         .align_child(Center, Center)
         .child(
             Column::new(vec![
-                Box::new(Text::new(clock.day_month).size(10.0).color(theme.text)),
+                Box::new(
+                    Text::new(clock.day_month)
+                        .font(UI_FONT)
+                        .size(12.0)
+                        .color(theme.text),
+                ),
                 Box::new(Rectangle::new().width(24.0).height(1.0).fill(theme.divider)),
-                Box::new(Text::new(clock.time).size(12.0).color(theme.text)),
+                Box::new(
+                    Text::new(clock.time)
+                        .font(UI_FONT)
+                        .size(14.0)
+                        .color(theme.text),
+                ),
             ])
             .width(Parent)
             .height(Parent)

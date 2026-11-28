@@ -98,11 +98,20 @@ fn header(files: &[PathBuf], selected_index: usize, theme: ThemeColors) -> Recta
         directory.display().to_string()
     };
 
-    let title = Column::new(vec![Box::new(
-        Text::new("Wallpapers")
-            .size(material_type::TITLE_MEDIUM)
-            .color(theme.text),
-    )])
+    let title = Column::new(vec![
+        Box::new(
+            Text::new("Wallpapers")
+                .size(material_type::TITLE_MEDIUM)
+                .color(theme.text),
+        ),
+        Box::new(
+            Text::new(directory_label)
+                .size(material_type::LABEL_SMALL)
+                .color(theme.muted)
+                .elide(),
+        ),
+    ])
+    .width(CONTENT_WIDTH - 120.0)
     .gap(material_space::XS)
     .justify(Center);
 
@@ -244,6 +253,14 @@ fn wallpaper_card(
         .unwrap_or("Wallpaper")
         .to_owned();
 
+    let status = if current {
+        " · Atual"
+    } else if selected {
+        " · Selecionado"
+    } else {
+        ""
+    };
+    let caption = format!("{filename}{status}");
     let overlay = Rectangle::new()
         .width(Parent)
         .height(34.0)
@@ -251,7 +268,9 @@ fn wallpaper_card(
         .fill(theme.bar_surface)
         .opacity(0.88)
         .translate(0.0, height - 34.0)
-        .align_child(Center, Center);
+        .padding(8.0)
+        .align_child(amane::Start, Center)
+        .child(Text::new(caption).size(11.0).color(theme.text).elide());
 
     let image = Rectangle::new()
         .width(width)
