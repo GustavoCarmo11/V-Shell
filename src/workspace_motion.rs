@@ -22,8 +22,8 @@ const MAX_DURATION: Duration = Duration::from_millis(850);
 const SPECIAL_PULSE_DURATION: Duration = Duration::from_millis(520);
 // Asymmetric timing for the workspace background: it grows more gently,
 // but contracts faster when workspaces disappear.
-const GROUP_HEIGHT_GROW_OMEGA: f32 = 24.0;
-const GROUP_HEIGHT_SHRINK_OMEGA: f32 = 32.0;
+const GROUP_HEIGHT_GROW_OMEGA: f32 = 26.0;
+const GROUP_HEIGHT_SHRINK_OMEGA: f32 = 26.0;
 const GROUP_HEIGHT_REST_DELTA: f32 = 0.12;
 const GROUP_HEIGHT_REST_SPEED: f32 = 0.20;
 

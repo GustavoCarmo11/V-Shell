@@ -9,9 +9,9 @@ mod wallpaper;
 mod workspace_motion;
 
 use amane::{
-    App, Apps, Center, Color, Column, End, Full, Horizontal, Image, InputArea, Keyboard, Layer,
-    LayerWindow, Monitor, Parent, Pointer, Rectangle, Service, SpaceBetween, Stack, Start, Text,
-    Vertical, Widget, Workspace, Workspaces, Zone,
+    App, Apps, Battery, Center, Color, Column, End, Full, Horizontal, Image, InputArea, Keyboard,
+    Layer, LayerWindow, Monitor, Parent, Pointer, Rectangle, Service, SpaceBetween, Stack, Start,
+    Text, Vertical, Widget, Workspace, Workspaces, Zone,
 };
 
 use active_window::ActiveWindow;
@@ -34,7 +34,7 @@ const WORKSPACE_INDICATOR_SIZE: f32 = 44.0;
 const WORKSPACE_GAP: f32 = 3.0;
 // Extra vertical room belongs to the outer background only, not between icons.
 const WORKSPACE_GROUP_VERTICAL_PADDING: f32 = 16.0;
-const BORDER_SIZE: f32 = 10.0;
+const BORDER_SIZE: f32 = 14.0;
 const BORDER_RADIUS: f32 = 24.0;
 const INNER_LEFT_RADIUS: f32 = 30.0;
 const INNER_RIGHT_RADIUS: f32 = 24.0;
@@ -370,7 +370,10 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         .align_child(Center, Start)
         .child(Motion::panel_hover(
             PanelId::Dashboard,
-            dashboard_panel(theme, DrawerState::is_open(), panel_width, panel_height)
+            // Keep the selected page alive throughout the closing spring; the
+            // open target flips as soon as hover ends, while progress reaches
+            // zero only after the panel has finished leaving the screen.
+            dashboard_panel(theme, motion_progress > 0.0, panel_width, panel_height)
                 .transform_matrix(deformation)
                 .translate(0.0, panel_top),
         ));
@@ -592,8 +595,7 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
                 .opacity(special_progress)
                 .align_child(Center, Center)
                 .child(
-                    Text::new("\u{f526}")
-                        .font("Material Symbols Rounded")
+                    Text::new("★")
                         .size(22.0 * workspace_motion.special_scale)
                         .color(theme.active_text),
                 ),
@@ -621,25 +623,37 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
 
     // The active-window title uses the free vertical space between the
     // workspaces and the bottom action plate, like Caelestia's bar component.
-    let window_area_height = (height - 12.0 - (20.0 + workspace_group_height) - 96.0).max(80.0);
+    let window_area_height = (height - 12.0 - (20.0 + workspace_group_height) - 132.0).max(80.0);
     let window_section = active_window_area(theme, window_area_height);
 
     // One shared background behind both bottom actions, using the exact
     // surface colour of the active workspace indicator. Individual buttons
     // remain transparent.
-    let bottom_actions = Column::new(vec![
+    let battery = Battery::read();
+    let mut bottom_action_widgets: Vec<Box<dyn Widget>> = vec![
         Box::new(theme_button(theme)),
         Box::new(session_button(theme)),
-    ])
-    .width(Parent)
-    .height(Parent)
-    .gap(7.0)
-    .align(Center)
-    .justify(Center);
+    ];
+    if battery.present() {
+        let icon = if battery.charging() {
+            "\u{e1a3}"
+        } else if battery.percent() <= 15 {
+            "\u{e19c}"
+        } else {
+            "\u{e1a4}"
+        };
+        bottom_action_widgets.push(Box::new(icon_button(icon, theme.active_surface)));
+    }
+    let bottom_actions = Column::new(bottom_action_widgets)
+        .width(Parent)
+        .height(Parent)
+        .gap(4.0)
+        .align(Center)
+        .justify(Center);
 
     let bottom_section = Rectangle::new()
         .width(36.0)
-        .height(96.0)
+        .height(132.0)
         .radius(16.0)
         .fill(theme.workspace_group_surface)
         .opacity(1.0)
@@ -744,7 +758,7 @@ fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
         .floor()
         .clamp(4.0, 40.0) as usize;
     let (previous_title, title_progress) = ActiveWindow::title_transition();
-    let incoming_opacity = title_progress.clamp(0.0, 1.0);
+    let incoming_opacity = title_progress.clamp(0.0, 1.3);
     let outgoing_opacity = 1.0 - incoming_opacity;
 
     // Crossfade the old and new labels in the same fixed layout slot. The
@@ -849,7 +863,7 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
         ThemeMode::Light => "\u{e51c}",
     };
 
-    icon_button(icon, theme.text).on_click(|_| {
+    icon_button(icon, theme.active_surface).on_click(|_| {
         Theme::toggle();
     })
 }
@@ -859,7 +873,7 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
 // --------------------------------------------------
 
 fn session_button(theme: ThemeColors) -> Rectangle {
-    icon_button("\u{f8c7}", theme.text).on_click(|_| {
+    icon_button("\u{f8c7}", theme.active_surface).on_click(|_| {
         println!("caelestia-rs: session");
     })
 }

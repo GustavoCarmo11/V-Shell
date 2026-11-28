@@ -306,7 +306,7 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
                 ),
                 Box::new(
                     ScrollArea::new(
-                        "gshell-dashboard-media-lyrics",
+                        "vshell-dashboard-media-lyrics",
                         Text::new(lyrics).size(13.0).color(theme.text).wrap(),
                     )
                     .width(Parent)
@@ -508,7 +508,7 @@ fn resolve_artwork(source: &str) -> Option<PathBuf> {
         return path.is_file().then_some(path);
     }
 
-    let cache_dir = cache_dir()?.join("gshell").join("media");
+    let cache_dir = cache_dir()?.join("vshell").join("media");
     fs::create_dir_all(&cache_dir).ok()?;
 
     let mut hasher = DefaultHasher::new();

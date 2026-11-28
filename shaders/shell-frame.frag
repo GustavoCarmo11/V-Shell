@@ -1,4 +1,4 @@
-// G-Shell unified shell surface with a velocity-driven BlobRect deformation.
+// V-Shell unified shell surface with a velocity-driven BlobRect deformation.
 // The Dashboard's own widget matrix is mirrored here by inverse-transforming
 // the SDF query point. This keeps the panel fill and panel contents in lockstep.
 //
@@ -77,7 +77,7 @@ void main() {
         vec2 screenDelta = p - panelCenter;
 
         // Invert the same centered matrix applied to the Dashboard Rectangle.
-        // The G-Shell deformer is symmetric: [m00 m01; m01 m11].
+        // The V-Shell deformer is symmetric: [m00 m01; m01 m11].
         float m00 = values[4].x;
         float m01 = values[4].y;
         float m10 = values[4].z;

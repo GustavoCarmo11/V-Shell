@@ -20,8 +20,8 @@ const LIST_HEIGHT: f32 = PANEL_HEIGHT - PANEL_PADDING * 2.0 - SEARCH_HEIGHT - CO
 const ROW_HEIGHT: f32 = 56.0;
 const ROW_GAP: f32 = 4.0;
 const ROW_PITCH: f32 = ROW_HEIGHT + ROW_GAP;
-const SEARCH_ID: &str = "g-shell-launcher-search";
-const SCROLL_ID: &str = "g-shell-launcher-app-list";
+const SEARCH_ID: &str = "v-shell-launcher-search";
+const SCROLL_ID: &str = "v-shell-launcher-app-list";
 
 #[derive(Default)]
 struct LauncherUiState {

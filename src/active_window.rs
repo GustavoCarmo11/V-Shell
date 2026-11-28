@@ -111,7 +111,7 @@ impl ActiveWindow {
             active.previous_title = Some(previous_title.to_owned());
 
             let mut transition = Animation::new(0.0)
-                .duration(Duration::from_millis(180))
+                .duration(Duration::from_millis(280))
                 .easing(Easing::InOut);
             transition.to(1.0);
             active.title_transition = Some(transition);
