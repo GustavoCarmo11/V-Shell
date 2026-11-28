@@ -5,6 +5,10 @@ use amane::{
     Text,
 };
 
+use crate::material::{
+    self, icon as material_icon, shape as material_shape, space as material_space,
+    type_size as material_type,
+};
 use crate::theme::ThemeColors;
 use crate::wallpaper::WallpaperService;
 
@@ -14,7 +18,7 @@ const SIDE_CARD_WIDTH: f32 = 205.0;
 const SIDE_CARD_HEIGHT: f32 = 132.0;
 const SELECTED_CARD_WIDTH: f32 = 338.0;
 const SELECTED_CARD_HEIGHT: f32 = 216.0;
-const CARD_GAP: f32 = 12.0;
+const CARD_GAP: f32 = material_space::MD;
 
 #[derive(Default)]
 struct WallpaperPickerState {
@@ -78,7 +82,7 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
             Column::new(vec![Box::new(header), Box::new(carousel)])
                 .width(Parent)
                 .height(Parent)
-                .gap(12.0)
+                .gap(material_space::MD)
                 .justify(SpaceBetween),
         )
 }
@@ -95,9 +99,11 @@ fn header(files: &[PathBuf], selected_index: usize, theme: ThemeColors) -> Recta
     };
 
     let title = Column::new(vec![Box::new(
-        Text::new("Wallpapers").size(17.0).color(theme.text),
+        Text::new("Wallpapers")
+            .size(material_type::TITLE_MEDIUM)
+            .color(theme.text),
     )])
-    .gap(3.0)
+    .gap(material_space::XS)
     .justify(Center);
 
     let counter = Text::new(format!("{:02} / {:02}", selected_index + 1, files.len()))
@@ -107,16 +113,11 @@ fn header(files: &[PathBuf], selected_index: usize, theme: ThemeColors) -> Recta
     let refresh = Rectangle::new()
         .width(34.0)
         .height(34.0)
-        .radius(12.0)
+        .radius(material_shape::CONTROL)
         .fill(theme.button_surface)
         .cursor(Pointer)
         .align_child(Center, Center)
-        .child(
-            Text::new("\u{e5d5}")
-                .font("Material Symbols Rounded")
-                .size(18.0)
-                .color(theme.muted),
-        )
+        .child(material_icon(material::icon::REFRESH, 18.0, theme.muted))
         .on_click(|_| {
             let count = WallpaperService::refresh();
             let current = WallpaperService::current();
@@ -136,7 +137,7 @@ fn header(files: &[PathBuf], selected_index: usize, theme: ThemeColors) -> Recta
             Row::new(vec![Box::new(title), Box::new(counter), Box::new(refresh)])
                 .width(Parent)
                 .height(Parent)
-                .gap(12.0)
+                .gap(material_space::MD)
                 .align(Center)
                 .justify(SpaceBetween),
         )
@@ -255,7 +256,7 @@ fn wallpaper_card(
     let image = Rectangle::new()
         .width(width)
         .height(height)
-        .radius(20.0)
+        .radius(material_shape::CARD)
         .clip()
         .fill(Image::cover(source.as_str()))
         .child(Stack::new(vec![Box::new(overlay)]))
@@ -266,7 +267,7 @@ fn wallpaper_card(
         Rectangle::new()
             .width(width + 6.0)
             .height(height + 6.0)
-            .radius(24.0)
+            .radius(material_shape::CARD)
             .fill(theme.accent)
             .padding(3.0)
             .child(image)
@@ -283,7 +284,7 @@ fn navigation_button(
     Rectangle::new()
         .width(40.0)
         .height(40.0)
-        .radius(13.0)
+        .radius(material_shape::CONTROL)
         .fill(theme.button_surface)
         .cursor(Pointer)
         .align_child(Center, Center)
@@ -318,7 +319,7 @@ fn empty_view(theme: ThemeColors) -> Rectangle {
     let refresh = Rectangle::new()
         .width(130.0)
         .height(40.0)
-        .radius(14.0)
+        .radius(material_shape::CONTROL)
         .fill(theme.active_surface)
         .cursor(Pointer)
         .align_child(Center, Center)
@@ -334,12 +335,7 @@ fn empty_view(theme: ThemeColors) -> Rectangle {
         .align_child(Center, Center)
         .child(
             Column::new(vec![
-                Box::new(
-                    Text::new("\u{e1bc}")
-                        .font("Material Symbols Rounded")
-                        .size(44.0)
-                        .color(theme.muted),
-                ),
+                Box::new(material_icon(material::icon::WALLPAPER, 44.0, theme.muted)),
                 Box::new(
                     Text::new("Nenhum wallpaper disponível")
                         .size(18.0)
@@ -351,7 +347,7 @@ fn empty_view(theme: ThemeColors) -> Rectangle {
             .width(Parent)
             .align(Center)
             .justify(Center)
-            .gap(12.0),
+            .gap(material_space::MD),
         )
 }
 

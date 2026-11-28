@@ -12,6 +12,10 @@ use amane::{
     ScrollArea, Service, Shape, Stack, Start, Text, Widget,
 };
 
+use crate::material::{
+    self, icon as material_icon, shape as material_shape, space as material_space,
+    type_size as material_type,
+};
 use crate::theme::ThemeColors;
 
 use super::visualizer;
@@ -21,7 +25,7 @@ const DETAILS_WIDTH: f32 = 252.0;
 const LYRICS_WIDTH: f32 = 270.0;
 const CONTENT_WIDTH: f32 = 804.0;
 const CONTENT_HEIGHT: f32 = 410.0;
-const COLUMN_GAP: f32 = 16.0;
+const COLUMN_GAP: f32 = material_space::LG;
 
 #[derive(Default)]
 struct TrackExtras {
@@ -172,7 +176,7 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
     ])
     .width(COVER_SIZE)
     .height(CONTENT_HEIGHT)
-    .gap(8.0)
+    .gap(material_space::SM)
     .align(Center)
     .justify(Center);
 
@@ -187,14 +191,14 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
             Rectangle::new()
                 .width(Parent)
                 .height(5.0)
-                .radius(3.0)
+                .radius(material_shape::EXTRA_SMALL)
                 .fill(theme.divider),
         ),
         Box::new(
             Rectangle::new()
                 .width(inner_details_width * progress)
                 .height(5.0)
-                .radius(3.0)
+                .radius(material_shape::EXTRA_SMALL)
                 .fill(theme.accent),
         ),
     ])
@@ -216,43 +220,53 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
     ])
     .width(inner_details_width)
     .height(16.0)
-    .gap(6.0)
+    .gap(material_space::SM)
     .align(Center)
     .justify(Start);
 
     let play_pause_icon = if player.playing {
-        "\u{e034}"
+        material::icon::PAUSE
     } else {
-        "\u{e037}"
+        material::icon::PLAY
     };
     let controls = Row::new(vec![
-        Box::new(control_button("\u{e045}", theme, Media::previous, 42.0)),
+        Box::new(control_button(
+            material::icon::SKIP_PREVIOUS,
+            theme,
+            Media::previous,
+            42.0,
+        )),
         Box::new(control_button(
             play_pause_icon,
             theme,
             Media::play_pause,
             48.0,
         )),
-        Box::new(control_button("\u{e044}", theme, Media::next, 42.0)),
+        Box::new(control_button(
+            material::icon::SKIP_NEXT,
+            theme,
+            Media::next,
+            42.0,
+        )),
     ])
     .width(inner_details_width)
     .height(48.0)
-    .gap(14.0)
+    .gap(material_space::LG)
     .align(Center)
     .justify(Center);
 
     let details_panel = Rectangle::new()
         .width(DETAILS_WIDTH)
         .height(CONTENT_HEIGHT)
-        .radius(24.0)
+        .radius(material_shape::CARD)
         .fill(theme.button_surface)
-        .padding(18.0)
+        .padding(material_space::LG)
         .child(
             Column::new(vec![
                 Box::new(Text::new("TOCANDO AGORA").size(10.0).color(theme.accent)),
                 Box::new(
                     Text::new(player.title.clone())
-                        .size(23.0)
+                        .size(material_type::TITLE_LARGE)
                         .color(theme.text)
                         .elide(),
                 ),
@@ -275,7 +289,7 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
             ])
             .width(Parent)
             .height(Parent)
-            .gap(12.0)
+            .gap(material_space::MD)
             .align(Start)
             .justify(Center),
         );
@@ -283,24 +297,19 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
     let lyrics_panel = Rectangle::new()
         .width(LYRICS_WIDTH)
         .height(CONTENT_HEIGHT)
-        .radius(24.0)
+        .radius(material_shape::CARD)
         .fill(theme.button_surface)
-        .padding(17.0)
+        .padding(material_space::LG)
         .child(
             Column::new(vec![
                 Box::new(
                     Row::new(vec![
-                        Box::new(
-                            Text::new("\u{e05f}")
-                                .font("Material Symbols Rounded")
-                                .size(17.0)
-                                .color(theme.accent),
-                        ),
+                        Box::new(material_icon(material::icon::LYRICS, 17.0, theme.accent)),
                         Box::new(Text::new("LETRAS").size(12.0).color(theme.text)),
                     ])
                     .width(Parent)
                     .height(22.0)
-                    .gap(8.0)
+                    .gap(material_space::SM)
                     .align(Center)
                     .justify(Start),
                 ),
@@ -315,7 +324,7 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
             ])
             .width(Parent)
             .height(Parent)
-            .gap(12.0)
+            .gap(material_space::MD)
             .align(Start)
             .justify(Start),
         );
@@ -348,17 +357,14 @@ fn no_player_view(theme: ThemeColors) -> Rectangle {
             Rectangle::new()
                 .width(420.0)
                 .height(210.0)
-                .radius(28.0)
+                .radius(material_shape::PANEL)
                 .fill(theme.button_surface)
-                .padding(24.0)
+                .padding(material_space::XL)
                 .align_child(Center, Center)
                 .child(
                     Column::new(vec![
                         Box::new(
-                            Text::new("\u{e04f}")
-                                .font("Material Symbols Rounded")
-                                .size(58.0)
-                                .color(theme.accent),
+                            material_icon(material::icon::MUSIC_OFF, 58.0, theme.accent),
                         ),
                         Box::new(Text::new("Nenhum player ativo").size(21.0).color(theme.text)),
                         Box::new(
@@ -369,7 +375,7 @@ fn no_player_view(theme: ThemeColors) -> Rectangle {
                         ),
                     ])
                     .width(Parent)
-                    .gap(12.0)
+                    .gap(material_space::MD)
                     .align(Center)
                     .justify(Center),
                 ),
@@ -416,22 +422,17 @@ fn artwork_view(theme: ThemeColors, artwork: Option<PathBuf>, bars: Vec<u8>) -> 
         Rectangle::new()
             .width(cover_size)
             .height(cover_size)
-            .radius(25.0)
+            .radius(material_shape::CARD)
             .clip()
             .fill(Image::cover(path))
     } else {
         Rectangle::new()
             .width(cover_size)
             .height(cover_size)
-            .radius(25.0)
+            .radius(material_shape::CARD)
             .fill(theme.button_surface)
             .align_child(Center, Center)
-            .child(
-                Text::new("\u{e04a}")
-                    .font("Material Symbols Rounded")
-                    .size(54.0)
-                    .color(theme.muted),
-            )
+            .child(material_icon(material::icon::ALBUM, 54.0, theme.muted))
     };
 
     let cover_center = Rectangle::new()
@@ -456,12 +457,11 @@ fn control_button(icon: &'static str, theme: ThemeColors, action: fn(), size: f3
         .fill(theme.button_surface)
         .cursor(amane::Pointer)
         .align_child(Center, Center)
-        .child(
-            Text::new(icon)
-                .font("Material Symbols Rounded")
-                .size(if size > 44.0 { 24.0 } else { 20.0 })
-                .color(theme.text),
-        )
+        .child(material_icon(
+            icon,
+            if size > 44.0 { 24.0 } else { 20.0 },
+            theme.text,
+        ))
         .on_click(move |_| action())
 }
 

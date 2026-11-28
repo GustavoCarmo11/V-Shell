@@ -9,13 +9,16 @@ use amane::{
     Start, Text,
 };
 
+use crate::material::{
+    self, icon as material_icon, shape as material_shape, space as material_space,
+};
 use crate::theme::ThemeColors;
 
 const MAIN_WIDTH: f32 = 532.0;
 const BATTERY_WIDTH: f32 = 146.0;
 const CONTENT_WIDTH: f32 = 694.0;
 const CONTENT_HEIGHT: f32 = 326.0;
-const ROW_GAP: f32 = 12.0;
+const ROW_GAP: f32 = material_space::MD;
 
 #[derive(Default, Clone, PartialEq, Eq)]
 struct HardwareStats {
@@ -167,7 +170,7 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
     };
 
     let cpu_card = hero_card(
-        "\u{e30d}",
+        material::icon::CPU,
         "CPU",
         &cpu_value,
         &cpu_detail,
@@ -176,7 +179,7 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
         theme,
     );
     let temperature_card = hero_card(
-        "\u{f076}",
+        material::icon::DEVICE_THERMOSTAT,
         "TEMPERATURA",
         &temp_value,
         &temp_detail,
@@ -188,27 +191,27 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
     let main_top = Row::new(vec![Box::new(cpu_card), Box::new(temperature_card)])
         .width(MAIN_WIDTH)
         .height(164.0)
-        .gap(12.0)
+        .gap(material_space::MD)
         .align(Start)
         .justify(Start);
 
     let main_bottom = Row::new(vec![
         Box::new(small_metric_card(
-            "\u{e322}",
+            material::icon::MEMORY,
             "RAM",
             &ram_value,
             &ram_detail,
             theme,
         )),
         Box::new(small_metric_card(
-            "\u{e640}",
+            material::icon::NETWORK,
             "REDE",
             &network_value,
             &network_detail,
             theme,
         )),
         Box::new(small_metric_card(
-            "\u{e1db}",
+            material::icon::STORAGE,
             "SSD",
             &disk_value,
             &disk_detail,
@@ -217,7 +220,7 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
     ])
     .width(MAIN_WIDTH)
     .height(150.0)
-    .gap(12.0)
+    .gap(material_space::MD)
     .align(Start)
     .justify(Start);
 
@@ -238,7 +241,7 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
             Row::new(vec![Box::new(main_column), Box::new(battery_card)])
                 .width(CONTENT_WIDTH)
                 .height(CONTENT_HEIGHT)
-                .gap(16.0)
+                .gap(material_space::LG)
                 .align(Start)
                 .justify(Start),
         )
@@ -262,24 +265,19 @@ fn hero_card(
     Rectangle::new()
         .width(CARD_WIDTH)
         .height(CARD_HEIGHT)
-        .radius(22.0)
+        .radius(material_shape::CARD)
         .fill(theme.button_surface)
-        .padding(16.0)
+        .padding(material_space::LG)
         .child(
             Column::new(vec![
                 Box::new(
                     Row::new(vec![
-                        Box::new(
-                            Text::new(icon)
-                                .font("Material Symbols Rounded")
-                                .size(19.0)
-                                .color(accent),
-                        ),
+                        Box::new(material_icon(icon, 19.0, accent)),
                         Box::new(Text::new(label.to_owned()).size(12.0).color(accent)),
                     ])
                     .width(Parent)
                     .height(22.0)
-                    .gap(8.0)
+                    .gap(material_space::SM)
                     .align(Center)
                     .justify(Start),
                 ),
@@ -299,7 +297,7 @@ fn hero_card(
             ])
             .width(Parent)
             .height(Parent)
-            .gap(8.0)
+            .gap(material_space::SM)
             .align(Start)
             .justify(Center),
         )
@@ -318,24 +316,19 @@ fn small_metric_card(
     Rectangle::new()
         .width(CARD_WIDTH)
         .height(CARD_HEIGHT)
-        .radius(20.0)
+        .radius(material_shape::CARD)
         .fill(theme.button_surface)
-        .padding(14.0)
+        .padding(material_space::LG)
         .child(
             Column::new(vec![
                 Box::new(
                     Row::new(vec![
-                        Box::new(
-                            Text::new(icon)
-                                .font("Material Symbols Rounded")
-                                .size(18.0)
-                                .color(theme.accent),
-                        ),
+                        Box::new(material_icon(icon, 18.0, theme.accent)),
                         Box::new(Text::new(label.to_owned()).size(11.0).color(theme.muted)),
                     ])
                     .width(Parent)
                     .height(22.0)
-                    .gap(7.0)
+                    .gap(material_space::SM)
                     .align(Center)
                     .justify(Start),
                 ),
@@ -354,7 +347,7 @@ fn small_metric_card(
             ])
             .width(Parent)
             .height(Parent)
-            .gap(9.0)
+            .gap(material_space::SM)
             .align(Start)
             .justify(Center),
         )
@@ -366,14 +359,14 @@ fn progress_bar(progress: f32, width: f32, foreground: Color, background: Color)
             Rectangle::new()
                 .width(Parent)
                 .height(7.0)
-                .radius(4.0)
+                .radius(material_shape::EXTRA_SMALL)
                 .fill(background),
         ),
         Box::new(
             Rectangle::new()
                 .width(width * progress.clamp(0.0, 1.0))
                 .height(7.0)
-                .radius(4.0)
+                .radius(material_shape::EXTRA_SMALL)
                 .fill(foreground),
         ),
     ])
@@ -416,7 +409,7 @@ fn battery_tank_card(
     let gauge = Rectangle::new()
         .width(GAUGE_WIDTH)
         .height(GAUGE_HEIGHT)
-        .radius(17.0)
+        .radius(material_shape::CARD)
         .clip()
         .fill(theme.divider)
         .child(
@@ -444,34 +437,37 @@ fn battery_tank_card(
     Rectangle::new()
         .width(BATTERY_WIDTH)
         .height(CONTENT_HEIGHT)
-        .radius(22.0)
+        .radius(material_shape::CARD)
         .fill(theme.button_surface)
-        .padding(14.0)
+        .padding(material_space::LG)
         .child(
             Column::new(vec![
                 Box::new(
                     Row::new(vec![
-                        Box::new(
-                            Text::new("\u{e1a4}")
-                                .font("Material Symbols Rounded")
-                                .size(18.0)
-                                .color(theme.accent),
-                        ),
+                        Box::new(material_icon(
+                            material::icon::BATTERY_FULL,
+                            18.0,
+                            theme.accent,
+                        )),
                         Box::new(Text::new("BATERIA").size(11.0).color(theme.muted)),
                     ])
                     .width(Parent)
                     .height(22.0)
-                    .gap(6.0)
+                    .gap(material_space::SM)
                     .align(Center)
                     .justify(Start),
                 ),
-                Box::new(Text::new(value).size(28.0).color(theme.text)),
+                Box::new(
+                    Text::new(value)
+                        .size(crate::material::type_size::HEADLINE_MEDIUM)
+                        .color(theme.text),
+                ),
                 Box::new(Text::new(status).size(10.0).color(theme.muted).elide()),
                 Box::new(gauge),
             ])
             .width(Parent)
             .height(Parent)
-            .gap(9.0)
+            .gap(material_space::SM)
             .align(Center)
             .justify(Center),
         )

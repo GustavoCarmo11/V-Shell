@@ -5,13 +5,17 @@ use std::time::Duration;
 
 use amane::{Center, Color, Column, Image, Parent, Rectangle, Row, Service, Start, Text, Widget};
 
+use crate::material::{
+    self, icon as material_icon, shape as material_shape, space as material_space,
+    type_size as material_type,
+};
 use crate::theme::ThemeColors;
 
 const CONTENT_WIDTH: f32 = 694.0;
 const CONTENT_HEIGHT: f32 = 390.0;
 const LEFT_COLUMN_WIDTH: f32 = 240.0;
 const CALENDAR_WIDTH: f32 = 438.0;
-const CARD_GAP: f32 = 16.0;
+const CARD_GAP: f32 = material_space::LG;
 
 #[derive(Clone, PartialEq, Eq)]
 struct DateClock {
@@ -146,26 +150,29 @@ fn profile_card(user: &str, theme: ThemeColors) -> Rectangle {
             .radius(AVATAR_SIZE / 2.0)
             .fill(theme.active_surface)
             .align_child(Center, Center)
-            .child(
-                Text::new("\u{e7fd}")
-                    .font("Material Symbols Rounded")
-                    .size(54.0)
-                    .color(theme.active_text),
-            )
+            .child(material_icon(
+                material::icon::PERSON,
+                54.0,
+                theme.active_text,
+            ))
     });
 
     Rectangle::new()
         .width(LEFT_COLUMN_WIDTH)
         .height(180.0)
-        .radius(24.0)
+        .radius(material_shape::CARD)
         .fill(theme.button_surface)
-        .padding(16.0)
+        .padding(material_space::LG)
         .child(
             Row::new(vec![
                 Box::new(avatar),
                 Box::new(
                     Column::new(vec![
-                        Box::new(Text::new("Bem-vindo").size(12.0).color(theme.muted)),
+                        Box::new(
+                            Text::new("Bem-vindo")
+                                .size(material_type::LABEL_MEDIUM)
+                                .color(theme.muted),
+                        ),
                         Box::new(
                             Text::new(user.to_owned())
                                 .size(18.0)
@@ -176,14 +183,14 @@ fn profile_card(user: &str, theme: ThemeColors) -> Rectangle {
                     ])
                     .width(84.0)
                     .height(Parent)
-                    .gap(7.0)
+                    .gap(material_space::SM)
                     .align(Start)
                     .justify(Center),
                 ),
             ])
             .width(Parent)
             .height(Parent)
-            .gap(12.0)
+            .gap(material_space::MD)
             .align(Center)
             .justify(Start),
         )
@@ -195,9 +202,9 @@ fn clock_card(clock: &DateClock, theme: ThemeColors) -> Rectangle {
     Rectangle::new()
         .width(LEFT_COLUMN_WIDTH)
         .height(194.0)
-        .radius(24.0)
+        .radius(material_shape::CARD)
         .fill(theme.button_surface)
-        .padding(18.0)
+        .padding(material_space::LG)
         .child(
             Column::new(vec![
                 Box::new(Text::new(hour.to_owned()).size(43.0).color(theme.text)),
@@ -278,7 +285,7 @@ fn calendar_card(clock: &DateClock, title: &str, theme: ThemeColors) -> Rectangl
             let cell = Rectangle::new()
                 .width(CELL_WIDTH)
                 .height(CELL_HEIGHT)
-                .radius(13.0)
+                .radius(material_shape::CONTROL)
                 .fill(if is_today {
                     theme.active_surface
                 } else {
@@ -305,24 +312,28 @@ fn calendar_card(clock: &DateClock, title: &str, theme: ThemeColors) -> Rectangl
     Rectangle::new()
         .width(CALENDAR_WIDTH)
         .height(CONTENT_HEIGHT)
-        .radius(28.0)
+        .radius(material_shape::PANEL)
         .fill(theme.button_surface)
-        .padding(16.0)
+        .padding(material_space::LG)
         .child(
             Column::new(vec![
-                Box::new(Text::new(title.to_owned()).size(19.0).color(theme.text)),
+                Box::new(
+                    Text::new(title.to_owned())
+                        .size(material_type::TITLE_LARGE)
+                        .color(theme.text),
+                ),
                 Box::new(
                     Column::new(rows)
                         .width(Parent)
                         .height(288.0)
-                        .gap(4.0)
+                        .gap(material_space::XS)
                         .align(Start)
                         .justify(Start),
                 ),
             ])
             .width(Parent)
             .height(Parent)
-            .gap(12.0)
+            .gap(material_space::MD)
             .align(Start)
             .justify(Center),
         )

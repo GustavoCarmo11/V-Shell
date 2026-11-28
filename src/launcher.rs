@@ -3,6 +3,10 @@ use amane::{
     Service, Stack, Start, Text, TextInput, Widget,
 };
 
+use crate::material::{
+    self, icon as material_icon, shape as material_shape, space as material_space,
+    type_size as material_type,
+};
 use crate::motion::{Motion, PanelId, PanelMotionSample};
 use crate::theme::ThemeColors;
 
@@ -14,11 +18,11 @@ pub const PANEL_BOTTOM_GAP: f32 = crate::BORDER_SIZE;
 
 const SEARCH_HEIGHT: f32 = 42.0;
 const SEARCH_BACKGROUND_OPACITY: f32 = 0.50;
-const PANEL_PADDING: f32 = 24.0;
-const CONTENT_GAP: f32 = 10.0;
+const PANEL_PADDING: f32 = material_space::XL;
+const CONTENT_GAP: f32 = material_space::MD;
 const LIST_HEIGHT: f32 = PANEL_HEIGHT - PANEL_PADDING * 2.0 - SEARCH_HEIGHT - CONTENT_GAP;
 const ROW_HEIGHT: f32 = 56.0;
-const ROW_GAP: f32 = 4.0;
+const ROW_GAP: f32 = material_space::XS;
 const ROW_PITCH: f32 = ROW_HEIGHT + ROW_GAP;
 const SEARCH_ID: &str = "v-shell-launcher-search";
 const SCROLL_ID: &str = "v-shell-launcher-app-list";
@@ -260,7 +264,7 @@ impl LauncherState {
         let search_background = Rectangle::new()
             .width(Parent)
             .height(Parent)
-            .radius(12.0)
+            .radius(material_shape::CONTROL)
             .fill(theme.button_surface)
             .opacity(SEARCH_BACKGROUND_OPACITY);
 
@@ -269,7 +273,7 @@ impl LauncherState {
         // character entry, Left/Right caret movement and Backspace editing.
         let search = TextInput::new(SEARCH_ID)
             .width(Parent)
-            .size(14.0)
+            .size(material_type::BODY_MEDIUM)
             .color(theme.text)
             .placeholder("Buscar aplicativos, jogos e programas...")
             .on_change(Self::set_query)
@@ -283,14 +287,14 @@ impl LauncherState {
         let search_input = Rectangle::new()
             .width(Parent)
             .height(Parent)
-            .padding(12.0)
+            .padding(material_space::MD)
             .align_child(Start, Center)
             .child(search);
 
         let search = Rectangle::new()
             .width(Parent)
             .height(SEARCH_HEIGHT)
-            .radius(12.0)
+            .radius(material_shape::CONTROL)
             .clip()
             .child(
                 Stack::new(vec![Box::new(search_background), Box::new(search_input)])
@@ -303,7 +307,7 @@ impl LauncherState {
         Rectangle::new()
             .width(PANEL_WIDTH)
             .height(PANEL_HEIGHT)
-            .radius(26.0)
+            .radius(material_shape::PANEL)
             .clip()
             .on_click(|_| {})
             .padding(PANEL_PADDING)
@@ -344,17 +348,19 @@ fn app_row(app: DesktopApp, theme: ThemeColors, selected: bool) -> Rectangle {
                 .width(40.0)
                 .height(40.0)
                 .align_child(Center, Center)
-                .child(
-                    Text::new("\u{e5c3}")
-                        .font("Material Symbols Rounded")
-                        .size(27.0)
-                        .color(theme.muted),
-                ),
+                .child(material_icon(
+                    material::icon::EXPAND_MORE,
+                    27.0,
+                    theme.muted,
+                )),
         )
     };
 
-    let mut text_items: Vec<Box<dyn Widget>> =
-        vec![Box::new(Text::new(name).size(15.0).color(theme.text))];
+    let mut text_items: Vec<Box<dyn Widget>> = vec![Box::new(
+        Text::new(name)
+            .size(material_type::BODY_LARGE)
+            .color(theme.text),
+    )];
 
     if let Some(description) = description.filter(|value| !value.trim().is_empty()) {
         text_items.push(Box::new(
@@ -367,27 +373,27 @@ fn app_row(app: DesktopApp, theme: ThemeColors, selected: bool) -> Rectangle {
     let text = Column::new(text_items)
         .width(Parent)
         .height(Parent)
-        .gap(3.0)
+        .gap(material_space::XS)
         .align(Start)
         .justify(Center);
 
     let background = Rectangle::new()
         .width(Parent)
         .height(Parent)
-        .radius(12.0)
+        .radius(material_shape::SMALL)
         .fill(theme.accent)
         .opacity(if selected { 0.18 } else { 0.0 });
 
     let content = Rectangle::new()
         .width(Parent)
         .height(Parent)
-        .padding(8.0)
+        .padding(material_space::SM)
         .align_child(Start, Center)
         .child(
             Row::new(vec![icon, Box::new(text)])
                 .width(Parent)
                 .height(Parent)
-                .gap(14.0)
+                .gap(material_space::LG)
                 .align(Center)
                 .justify(Start),
         );
@@ -395,7 +401,7 @@ fn app_row(app: DesktopApp, theme: ThemeColors, selected: bool) -> Rectangle {
     Rectangle::new()
         .width(Parent)
         .height(ROW_HEIGHT)
-        .radius(12.0)
+        .radius(material_shape::CONTROL)
         .cursor(Pointer)
         .on_click(move |_| {
             launch_app.launch();

@@ -1,6 +1,7 @@
 mod active_window;
 mod drawer;
 mod launcher;
+mod material;
 mod modules;
 mod motion;
 mod special_workspace;
@@ -19,6 +20,7 @@ use drawer::DrawerState;
 use launcher::{
     LauncherState, PANEL_BOTTOM_GAP, PANEL_HEIGHT as LAUNCHER_HEIGHT, PANEL_WIDTH as LAUNCHER_WIDTH,
 };
+use material::{icon as material_icon, shape as material_shape, space as material_space};
 use modules::dashboard::{
     dashboard_dimensions, dashboard_panel, dashboard_size_sample, set_dashboard_size_target,
 };
@@ -569,7 +571,7 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
                 Rectangle::new()
                     .width(40.0)
                     .height(Parent)
-                    .radius(21.0)
+                    .radius(material_shape::FULL)
                     .fill(theme.workspace_group_surface)
                     .opacity(1.0),
             ),
@@ -594,11 +596,11 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
                 .height(workspace_group_height)
                 .opacity(special_progress)
                 .align_child(Center, Center)
-                .child(
-                    Text::new("★")
-                        .size(22.0 * workspace_motion.special_scale)
-                        .color(theme.active_text),
-                ),
+                .child(material_icon(
+                    material::icon::STAR,
+                    22.0 * workspace_motion.special_scale,
+                    theme.active_text,
+                )),
         ));
     }
 
@@ -617,7 +619,7 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
         Box::new(workspace_group),
     ])
     .width(Parent)
-    .gap(10.0)
+    .gap(material_space::SM)
     .align(Center)
     .justify(Start);
 
@@ -636,25 +638,25 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     ];
     if battery.present() {
         let icon = if battery.charging() {
-            "\u{e1a3}"
+            material::icon::BATTERY_CHARGING
         } else if battery.percent() <= 15 {
-            "\u{e19c}"
+            material::icon::BATTERY_LOW
         } else {
-            "\u{e1a4}"
+            material::icon::BATTERY_FULL
         };
         bottom_action_widgets.push(Box::new(icon_button(icon, theme.active_surface)));
     }
     let bottom_actions = Column::new(bottom_action_widgets)
         .width(Parent)
         .height(Parent)
-        .gap(4.0)
+        .gap(material_space::XS)
         .align(Center)
         .justify(Center);
 
     let bottom_section = Rectangle::new()
         .width(36.0)
         .height(132.0)
-        .radius(16.0)
+        .radius(material_shape::CARD)
         .fill(theme.workspace_group_surface)
         .opacity(1.0)
         .align_child(Center, Center)
@@ -845,12 +847,7 @@ fn icon_button(icon: &'static str, foreground: Color) -> Rectangle {
         .fill(Color::TRANSPARENT)
         .cursor(Pointer)
         .align_child(Center, Center)
-        .child(
-            Text::new(icon)
-                .font("Material Symbols Rounded")
-                .size(19.0)
-                .color(foreground),
-        )
+        .child(material_icon(icon, 19.0, foreground))
 }
 
 // --------------------------------------------------
@@ -859,8 +856,8 @@ fn icon_button(icon: &'static str, foreground: Color) -> Rectangle {
 
 fn theme_button(theme: ThemeColors) -> Rectangle {
     let icon = match theme.mode {
-        ThemeMode::Dark => "\u{e518}",
-        ThemeMode::Light => "\u{e51c}",
+        ThemeMode::Dark => material::icon::DARK_MODE,
+        ThemeMode::Light => material::icon::LIGHT_MODE,
     };
 
     icon_button(icon, theme.active_surface).on_click(|_| {
@@ -873,7 +870,7 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
 // --------------------------------------------------
 
 fn session_button(theme: ThemeColors) -> Rectangle {
-    icon_button("\u{f8c7}", theme.active_surface).on_click(|_| {
+    icon_button(material::icon::POWER_SETTINGS, theme.active_surface).on_click(|_| {
         println!("caelestia-rs: session");
     })
 }

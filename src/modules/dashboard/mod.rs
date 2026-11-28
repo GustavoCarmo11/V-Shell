@@ -9,14 +9,21 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use amane::{Center, Color, Column, Parent, Pointer, Rectangle, Row, Service, Text};
 
+use crate::material::{
+    self, icon as material_icon, shape as material_shape, space as material_space,
+};
 use crate::theme::ThemeColors;
 
 pub use size_motion::{sample as dashboard_size_sample, set_target as set_dashboard_size_target};
 
-const NAVIGATION_WIDTH: f32 = 42.0;
+// Material 3 Navigation Rail's standard indicator width.
+const NAVIGATION_WIDTH: f32 = 56.0;
+const NAVIGATION_ITEM_HEIGHT: f32 = 42.0;
+const NAVIGATION_INDICATOR_HEIGHT: f32 = 32.0;
+const NAVIGATION_ICON_SIZE: f32 = 24.0;
 const NAVIGATION_HEIGHT: f32 = 195.0;
-const NAVIGATION_GAP: f32 = 10.0;
-const PANEL_PADDING: f32 = 16.0;
+const NAVIGATION_GAP: f32 = material_space::SM;
+const PANEL_PADDING: f32 = material_space::LG;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum DashboardTab {
@@ -124,25 +131,25 @@ pub fn dashboard_panel(
 
     let navigation = Column::new(vec![
         Box::new(tab_button(
-            "\u{e871}",
+            material::icon::HOME,
             selected == DashboardTab::Dash,
             theme,
             || select_tab(DashboardTab::Dash),
         )),
         Box::new(tab_button(
-            "\u{e405}",
+            material::icon::MUSIC_NOTE,
             selected == DashboardTab::Media,
             theme,
             || select_tab(DashboardTab::Media),
         )),
         Box::new(tab_button(
-            "\u{e9e4}",
+            material::icon::MONITORING,
             selected == DashboardTab::Performance,
             theme,
             || select_tab(DashboardTab::Performance),
         )),
         Box::new(tab_button(
-            "\u{e1bc}",
+            material::icon::WALLPAPER,
             selected == DashboardTab::Wallpapers,
             theme,
             || select_tab(DashboardTab::Wallpapers),
@@ -150,7 +157,7 @@ pub fn dashboard_panel(
     ])
     .width(NAVIGATION_WIDTH)
     .height(NAVIGATION_HEIGHT)
-    .gap(9.0)
+    .gap(material_space::SM)
     .align(Center)
     .justify(Center);
 
@@ -163,7 +170,7 @@ pub fn dashboard_panel(
     Rectangle::new()
         .width(animated_panel_width)
         .height(animated_panel_height)
-        .radius(26.0)
+        .radius(material_shape::PANEL)
         .clip()
         .padding(PANEL_PADDING)
         .child(
@@ -194,18 +201,20 @@ fn tab_button(
         theme.muted
     };
 
+    let indicator = Rectangle::new()
+        .width(NAVIGATION_WIDTH)
+        .height(NAVIGATION_INDICATOR_HEIGHT)
+        .radius(material_shape::FULL)
+        .fill(background)
+        .align_child(Center, Center)
+        .child(material_icon(icon, NAVIGATION_ICON_SIZE, foreground));
+
     Rectangle::new()
         .width(NAVIGATION_WIDTH)
-        .height(NAVIGATION_WIDTH)
-        .radius(14.0)
-        .fill(background)
+        .height(NAVIGATION_ITEM_HEIGHT)
+        .fill(Color::TRANSPARENT)
         .cursor(Pointer)
         .align_child(Center, Center)
-        .child(
-            Text::new(icon)
-                .font("Material Symbols Rounded")
-                .size(21.0)
-                .color(foreground),
-        )
+        .child(indicator)
         .on_click(move |_| on_select())
 }
