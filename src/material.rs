@@ -32,6 +32,19 @@ pub mod icon {
     pub const DARK_MODE: &str = "\u{e518}";
     pub const LIGHT_MODE: &str = "\u{e51c}";
     pub const ACCOUNT_CIRCLE: &str = "\u{e853}";
+    pub const WIFI: &str = "\u{e63e}";
+    pub const WIFI_OFF: &str = "\u{e648}";
+    pub const BLUETOOTH: &str = "\u{e1a7}";
+    pub const BLUETOOTH_DISABLED: &str = "\u{e1a9}";
+    pub const VOLUME_UP: &str = "\u{e050}";
+    pub const VOLUME_OFF: &str = "\u{e04f}";
+    pub const MIC: &str = "\u{e029}";
+    pub const MIC_OFF: &str = "\u{e02b}";
+    pub const BATTERY_0: &str = "\u{e19c}";
+    pub const BATTERY_1: &str = "\u{e19d}";
+    pub const BATTERY_2: &str = "\u{e1a0}";
+    pub const BATTERY_3: &str = "\u{e1a2}";
+    pub const BATTERY_4: &str = "\u{e1a4}";
     pub const STAR: &str = "\u{e838}";
 }
 

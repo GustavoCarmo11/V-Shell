@@ -12,9 +12,9 @@ mod wallpaper;
 mod workspace_motion;
 
 use amane::{
-    App, Apps, Center, Color, Column, End, Full, Horizontal, Image, InputArea, Keyboard, Layer,
-    LayerWindow, Monitor, Parent, Pointer, Rectangle, Service, SpaceBetween, Stack, Start, Text,
-    Vertical, Widget, Workspace, Workspaces, Zone,
+    App, Apps, Audio, Bluetooth, Center, Color, Column, End, Full, Horizontal, Image, InputArea,
+    Keyboard, Layer, LayerWindow, Monitor, Network, Parent, Pointer, Rectangle, Service,
+    SpaceBetween, Stack, Start, Text, Vertical, Widget, Workspace, Workspaces, Zone,
 };
 
 use active_window::ActiveWindow;
@@ -41,7 +41,7 @@ const WORKSPACE_INDICATOR_SIZE: f32 = 44.0;
 const WORKSPACE_GAP: f32 = 2.0;
 // Extra vertical room belongs to the outer background only, not between icons.
 const WORKSPACE_GROUP_VERTICAL_PADDING: f32 = 16.0;
-const BOTTOM_ACTIONS_HEIGHT: f32 = 132.0;
+const BOTTOM_ACTIONS_HEIGHT: f32 = 204.0;
 const BOTTOM_CLOCK_HEIGHT: f32 = 48.0;
 const BOTTOM_CLOCK_GAP: f32 = 28.0;
 const BOTTOM_SECTION_HEIGHT: f32 = BOTTOM_ACTIONS_HEIGHT + BOTTOM_CLOCK_HEIGHT + BOTTOM_CLOCK_GAP;
@@ -641,9 +641,62 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     // A shared surface groups the bottom actions; each icon itself stays
     // transparent and uses the high-contrast on-surface color.
     let battery = RailBattery::snapshot();
+    let audio = Audio::read();
+    let network = Network::read();
+    let bluetooth = Bluetooth::read();
     let mut bottom_action_widgets: Vec<Box<dyn Widget>> = vec![
         Box::new(theme_button(theme)),
-        Box::new(session_button(theme)),
+        Box::new(
+            status_button(
+                if audio.muted() || audio.volume() == 0 {
+                    material::icon::VOLUME_OFF
+                } else {
+                    material::icon::VOLUME_UP
+                },
+                theme,
+            )
+            .on_click(|_| Audio::toggle_mute()),
+        ),
+        Box::new(
+            status_button(
+                if audio.microphone_muted() {
+                    material::icon::MIC_OFF
+                } else {
+                    material::icon::MIC
+                },
+                theme,
+            )
+            .on_click(|_| Audio::toggle_microphone_mute()),
+        ),
+        Box::new(
+            status_button(
+                if network.wifi_enabled() && network.connected() {
+                    material::icon::WIFI
+                } else {
+                    material::icon::WIFI_OFF
+                },
+                theme,
+            )
+            .on_click(|_| Network::scan()),
+        ),
+        Box::new(
+            status_button(
+                if bluetooth.powered() {
+                    material::icon::BLUETOOTH
+                } else {
+                    material::icon::BLUETOOTH_DISABLED
+                },
+                theme,
+            )
+            .on_click(|_| {
+                let state = Bluetooth::read();
+                if state.powered() {
+                    Bluetooth::start_scan();
+                } else {
+                    Bluetooth::set_powered(true);
+                }
+            }),
+        ),
     ];
     if battery.present {
         bottom_action_widgets.push(Box::new(battery_indicator(
@@ -978,8 +1031,6 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
 // SESSION
 // --------------------------------------------------
 
-fn session_button(theme: ThemeColors) -> Rectangle {
-    icon_button(material::icon::ACCOUNT_CIRCLE, theme).on_click(|_| {
-        println!("caelestia-rs: session");
-    })
+fn status_button(icon: &'static str, theme: ThemeColors) -> Rectangle {
+    icon_button(icon, theme)
 }
