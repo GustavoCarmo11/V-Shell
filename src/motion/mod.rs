@@ -228,6 +228,21 @@ impl Motion {
             .inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if open {
+            for (other, other_state) in inner.iter_mut() {
+                if *other == panel || other_state.motion.target() < 0.5 {
+                    continue;
+                }
+                other_state.close_deadline = None;
+                let config = if *other == PanelId::Launcher {
+                    LAUNCHER_CLOSE
+                } else {
+                    PANEL_CLOSE
+                };
+                other_state.motion.set_target_with_config(0.0, config);
+            }
+        }
+
         let panel_state = inner
             .get_mut(&panel)
             .expect("PanelId must be registered in MotionState::new");

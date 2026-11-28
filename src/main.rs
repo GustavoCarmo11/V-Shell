@@ -7,6 +7,7 @@ mod motion;
 mod rail_battery;
 mod rail_clock;
 mod special_workspace;
+mod status_popouts;
 mod theme;
 mod wallpaper;
 mod workspace_motion;
@@ -30,6 +31,7 @@ use motion::{Motion, PanelId};
 use rail_battery::RailBattery;
 use rail_clock::RailClock;
 use special_workspace::SpecialWorkspace;
+use status_popouts::status_popouts;
 use theme::{Theme, ThemeColors, ThemeMode};
 use wallpaper::WallpaperService;
 use workspace_motion::WorkspaceMotion;
@@ -41,7 +43,7 @@ const WORKSPACE_INDICATOR_SIZE: f32 = 44.0;
 const WORKSPACE_GAP: f32 = 2.0;
 // Extra vertical room belongs to the outer background only, not between icons.
 const WORKSPACE_GROUP_VERTICAL_PADDING: f32 = 16.0;
-const BOTTOM_ACTIONS_HEIGHT: f32 = 204.0;
+const BOTTOM_ACTIONS_HEIGHT: f32 = 224.0;
 const BOTTOM_CLOCK_HEIGHT: f32 = 48.0;
 const BOTTOM_CLOCK_GAP: f32 = 28.0;
 const BOTTOM_SECTION_HEIGHT: f32 = BOTTOM_ACTIONS_HEIGHT + BOTTOM_CLOCK_HEIGHT + BOTTOM_CLOCK_GAP;
@@ -225,7 +227,8 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
     let launcher_origin_bottom = launcher_panel_top.clamp(launcher_origin_y, monitor.height as f32);
     let launcher_origin_height = (launcher_origin_bottom - launcher_origin_y).max(0.0);
 
-    // Pointer input covers the rail and the two panel-origin areas.
+    // Pointer input covers the rail and the two panel-origin areas, then
+    // expands to the lower-left status-panel area while a pop-out is active.
     // Dashboard emerges from the top-center edge; Launcher emerges from bottom-center.
     // These source regions remain interactive even when the panels are hidden.
     let mut input_areas = vec![
@@ -248,6 +251,24 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
             height: ORIGIN_HOVER_DEPTH.ceil() as i32,
         },
     ];
+
+    let status_panel_open = [
+        PanelId::QuickSettings,
+        PanelId::Wifi,
+        PanelId::Bluetooth,
+        PanelId::Audio,
+    ]
+    .into_iter()
+    .any(|panel| Motion::is_open(panel) || Motion::progress(panel) > 0.001);
+    if status_panel_open {
+        let panel_region_height = 600.0_f32.min(monitor.height as f32);
+        input_areas.push(InputArea {
+            x: 0,
+            y: (monitor.height as f32 - panel_region_height).max(0.0) as i32,
+            width: 360,
+            height: panel_region_height.ceil() as i32,
+        });
+    }
 
     if motion_progress > 0.001 {
         // The transformed panel can extend beyond its layout rectangle. Expand
@@ -402,6 +423,8 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
                 .translate(0.0, launcher_translate_y),
         ));
 
+    let status_layers = status_popouts(theme, monitor.width as f32, monitor.height as f32);
+
     // Hover is detected at each module's origin in the perimeter, not on rail icons.
     // Dashboard starts at the top-center edge.
     let dashboard_origin_hover = Motion::trigger_hover(
@@ -433,11 +456,13 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         .namespace("caelestia-rs-bar")
         // The layer surface only takes keyboard focus while the Launcher is open.
         // Exclusive is necessary because OnDemand would require a click first.
-        .keyboard(if LauncherState::is_open() {
-            Keyboard::Exclusive
-        } else {
-            Keyboard::None
-        })
+        .keyboard(
+            if LauncherState::is_open() || Motion::is_open(PanelId::Wifi) {
+                Keyboard::Exclusive
+            } else {
+                Keyboard::None
+            },
+        )
         .input_region(input_areas)
         .child(
             Rectangle::new()
@@ -457,6 +482,7 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
                         Box::new(rail_layer),
                         Box::new(dashboard_layer),
                         Box::new(launcher_layer),
+                        Box::new(status_layers),
                         Box::new(dashboard_origin_hover),
                         Box::new(launcher_origin_hover),
                     ])
@@ -646,63 +672,51 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     let bluetooth = Bluetooth::read();
     let mut bottom_action_widgets: Vec<Box<dyn Widget>> = vec![
         Box::new(theme_button(theme)),
-        Box::new(
-            status_button(
-                if audio.muted() || audio.volume() == 0 {
-                    material::icon::VOLUME_OFF
-                } else {
-                    material::icon::VOLUME_UP
-                },
-                theme,
-            )
-            .on_click(|_| Audio::toggle_mute()),
-        ),
-        Box::new(
-            status_button(
-                if audio.microphone_muted() {
-                    material::icon::MIC_OFF
-                } else {
-                    material::icon::MIC
-                },
-                theme,
-            )
-            .on_click(|_| Audio::toggle_microphone_mute()),
-        ),
-        Box::new(
-            status_button(
-                if network.wifi_enabled() && network.connected() {
-                    material::icon::WIFI
-                } else {
-                    material::icon::WIFI_OFF
-                },
-                theme,
-            )
-            .on_click(|_| Network::scan()),
-        ),
-        Box::new(
-            status_button(
-                if bluetooth.powered() {
-                    material::icon::BLUETOOTH
-                } else {
-                    material::icon::BLUETOOTH_DISABLED
-                },
-                theme,
-            )
-            .on_click(|_| {
-                let state = Bluetooth::read();
-                if state.powered() {
-                    Bluetooth::start_scan();
-                } else {
-                    Bluetooth::set_powered(true);
-                }
-            }),
-        ),
+        Box::new(status_button(
+            if audio.muted() || audio.volume() == 0 {
+                material::icon::VOLUME_OFF
+            } else if audio.volume() < 50 {
+                material::icon::VOLUME_DOWN
+            } else {
+                material::icon::VOLUME_UP
+            },
+            theme,
+            PanelId::Audio,
+        )),
+        Box::new(status_button(
+            if audio.microphone_muted() {
+                material::icon::MIC_OFF
+            } else {
+                material::icon::MIC
+            },
+            theme,
+            PanelId::Audio,
+        )),
+        Box::new(status_button(
+            if network.wifi_enabled() {
+                material::icon::WIFI
+            } else {
+                material::icon::WIFI_OFF
+            },
+            theme,
+            PanelId::Wifi,
+        )),
+        Box::new(status_button(
+            if !bluetooth.powered() {
+                material::icon::BLUETOOTH_DISABLED
+            } else if bluetooth.devices().iter().any(|device| device.connected()) {
+                material::icon::BLUETOOTH_CONNECTED
+            } else {
+                material::icon::BLUETOOTH
+            },
+            theme,
+            PanelId::Bluetooth,
+        )),
     ];
     if battery.present {
-        bottom_action_widgets.push(Box::new(battery_indicator(
-            battery.percent,
-            battery.charging,
-            theme,
+        bottom_action_widgets.push(Box::new(Motion::trigger_hover(
+            PanelId::QuickSettings,
+            battery_indicator(battery.percent, battery.charging, theme),
         )));
     }
     let bottom_actions = Column::new(bottom_action_widgets)
@@ -925,60 +939,35 @@ fn icon_button(icon: &'static str, theme: ThemeColors) -> Rectangle {
 }
 
 fn battery_indicator(percent: u8, charging: bool, theme: ThemeColors) -> Rectangle {
-    const BODY_WIDTH: f32 = 20.0;
-    const BODY_HEIGHT: f32 = 14.0;
-    const INNER_WIDTH: f32 = 15.0;
-    const INNER_HEIGHT: f32 = 6.0;
-
-    let level_width = INNER_WIDTH * (percent.min(100) as f32 / 100.0);
-    let mut layers: Vec<Box<dyn Widget>> = vec![
-        Box::new(
-            Rectangle::new()
-                .width(BODY_WIDTH)
-                .height(BODY_HEIGHT)
-                .radius(material_shape::EXTRA_SMALL)
-                .fill(Color::TRANSPARENT)
-                .border(1.5, theme.text),
-        ),
-        Box::new(
-            Rectangle::new()
-                .width(3.0)
-                .height(6.0)
-                .radius(1.0)
-                .fill(theme.text)
-                .translate(BODY_WIDTH, 4.0),
-        ),
-    ];
-
-    if level_width > 0.0 {
-        layers.push(Box::new(
-            Rectangle::new()
-                .width(level_width)
-                .height(INNER_HEIGHT)
-                .radius(material_shape::EXTRA_SMALL)
-                .fill(theme.accent)
-                .translate(2.5, 4.0),
-        ));
-    }
-
+    let icon = if percent <= 10 {
+        material::icon::BATTERY_VERTICAL_0
+    } else if percent <= 30 {
+        material::icon::BATTERY_VERTICAL_20
+    } else if percent <= 60 {
+        material::icon::BATTERY_VERTICAL_50
+    } else if percent <= 90 {
+        material::icon::BATTERY_VERTICAL_80
+    } else {
+        material::icon::BATTERY_VERTICAL_FULL
+    };
+    let mut icons: Vec<Box<dyn Widget>> = vec![Box::new(material_icon(icon, 23.0, theme.accent))];
     if charging {
-        layers.push(Box::new(
+        icons.push(Box::new(
             Rectangle::new()
-                .width(14.0)
-                .height(12.0)
+                .width(10.0)
+                .height(14.0)
                 .fill(Color::TRANSPARENT)
                 .align_child(Center, Center)
-                .child(material_icon(material::icon::BOLT, 9.0, theme.text))
-                .translate(3.0, 1.0),
+                .child(material_icon(material::icon::BOLT, 9.0, theme.accent))
+                .translate(0.0, 2.0),
         ));
     }
-
     Rectangle::new()
         .width(32.0)
         .height(32.0)
         .fill(Color::TRANSPARENT)
         .align_child(Center, Center)
-        .child(Stack::new(layers).width(24.0).height(20.0))
+        .child(Stack::new(icons).width(24.0).height(24.0))
 }
 
 fn rail_clock(theme: ThemeColors) -> Rectangle {
@@ -1031,6 +1020,14 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
 // SESSION
 // --------------------------------------------------
 
-fn status_button(icon: &'static str, theme: ThemeColors) -> Rectangle {
-    icon_button(icon, theme)
+fn status_button(icon: &'static str, theme: ThemeColors, panel: PanelId) -> Rectangle {
+    Motion::trigger_hover(
+        panel,
+        Rectangle::new()
+            .width(32.0)
+            .height(32.0)
+            .fill(Color::TRANSPARENT)
+            .align_child(Center, Center)
+            .child(material_icon(icon, 21.0, theme.accent)),
+    )
 }
