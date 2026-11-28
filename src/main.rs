@@ -37,8 +37,8 @@ use workspace_motion::WorkspaceMotion;
 const RAIL_WIDTH: f32 = 60.0;
 const UI_FONT: &str = "Rubik";
 const WORKSPACE_INDICATOR_SIZE: f32 = 44.0;
-// Keep the original spacing between workspace indicators unchanged.
-const WORKSPACE_GAP: f32 = 3.0;
+// Spacing between adjacent workspace pills, in logical pixels.
+const WORKSPACE_GAP: f32 = 2.0;
 // Extra vertical room belongs to the outer background only, not between icons.
 const WORKSPACE_GROUP_VERTICAL_PADDING: f32 = 16.0;
 const BOTTOM_ACTIONS_HEIGHT: f32 = 132.0;

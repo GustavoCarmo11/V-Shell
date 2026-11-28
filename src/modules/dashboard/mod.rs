@@ -30,8 +30,7 @@ const NAVIGATION_ICON_SIZE: f32 = 24.0;
 const NAVIGATION_HEIGHT: f32 = 195.0;
 const NAVIGATION_GAP: f32 = material_space::SM;
 const PANEL_PADDING: f32 = material_space::LG;
-const TAB_TRANSITION_DURATION: Duration = Duration::from_millis(240);
-const TAB_TRANSITION_DISTANCE: f32 = 28.0;
+const TAB_TRANSITION_DURATION: Duration = Duration::from_millis(320);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum DashboardTab {
@@ -130,7 +129,7 @@ fn select_tab(tab: DashboardTab) {
 
     let mut transition = Animation::new(0.0)
         .duration(TAB_TRANSITION_DURATION)
-        .easing(Easing::Out);
+        .easing(Easing::InOut);
     transition.to(1.0);
 
     state.previous = Some(current);
@@ -197,18 +196,20 @@ pub fn dashboard_panel(
     } else if let Some(transition) = transition {
         let progress = transition.progress;
         let direction = transition.direction;
+        let transition_distance = dimensions.content_height.max(NAVIGATION_HEIGHT);
         let incoming = Rectangle::new()
             .width(Parent)
             .height(Parent)
-            .opacity(progress)
-            .translate(0.0, direction * (1.0 - progress) * TAB_TRANSITION_DISTANCE)
+            .translate(
+                0.0,
+                direction * (1.0 - progress) * transition_distance,
+            )
             .align_child(amane::Start, amane::Start)
             .child(selected.view(theme));
         let outgoing = Rectangle::new()
             .width(Parent)
             .height(Parent)
-            .opacity(1.0 - progress)
-            .translate(0.0, -direction * progress * TAB_TRANSITION_DISTANCE)
+            .translate(0.0, -direction * progress * transition_distance)
             .align_child(amane::Start, amane::Start)
             .child(transition.previous.view(theme));
 
