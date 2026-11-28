@@ -1,6 +1,6 @@
 use std::{env, fs, path::PathBuf, time::Duration};
 
-use amane::{Animation, Color, Easing, Service};
+use amane::{Animation, Color, Easing, Service, request_frame};
 
 // --------------------------------------------------
 // THEME MODE
@@ -281,8 +281,10 @@ impl Theme {
         theme.mode = next_mode;
 
         theme.animate_to(colors, MODE_TRANSITION_DURATION);
+        drop(theme);
 
         println!("Theme changed to {:?}", next_mode);
+        request_frame();
     }
 
     // --------------------------------------------------

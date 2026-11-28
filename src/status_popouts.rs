@@ -1004,54 +1004,50 @@ fn wifi_network_row(
     on_select: impl Fn() + 'static,
 ) -> Rectangle {
     let foreground = if connected { theme.accent } else { theme.text };
-    let lock: Box<dyn Widget> = if secured {
-        Box::new(crate::material::icon(
-            material::icon::LOCK,
-            17.0,
-            theme.muted,
-        ))
-    } else {
-        Box::new(Rectangle::new().width(18.0).height(18.0))
-    };
     let connected_icon = if connected {
         material::icon::CHECK
     } else {
         material::icon::LINK
     };
+    let mut row: Vec<Box<dyn Widget>> = vec![Box::new(crate::material::icon(
+        material::icon::SIGNAL_WIFI,
+        20.0,
+        if strength >= 60 {
+            theme.accent
+        } else {
+            theme.muted
+        },
+    ))];
+    if secured {
+        row.push(Box::new(crate::material::icon(
+            material::icon::LOCK,
+            17.0,
+            theme.muted,
+        )));
+    }
+    row.push(Box::new(
+        Text::new(ssid.to_owned())
+            .size(14.0)
+            .color(foreground)
+            .elide(),
+    ));
+    row.push(Box::new(crate::material::icon(
+        connected_icon,
+        19.0,
+        if connected { theme.accent } else { theme.muted },
+    )));
     Rectangle::new()
         .width(Parent)
         .height(36.0)
         .fill(Color::TRANSPARENT)
         .cursor(amane::Pointer)
         .child(
-            amane::Row::new(vec![
-                Box::new(crate::material::icon(
-                    material::icon::SIGNAL_WIFI,
-                    20.0,
-                    if strength >= 60 {
-                        theme.accent
-                    } else {
-                        theme.muted
-                    },
-                )),
-                lock,
-                Box::new(
-                    Text::new(ssid.to_owned())
-                        .size(14.0)
-                        .color(foreground)
-                        .elide(),
-                ),
-                Box::new(crate::material::icon(
-                    connected_icon,
-                    19.0,
-                    if connected { theme.accent } else { theme.muted },
-                )),
-            ])
-            .width(Parent)
-            .height(Parent)
-            .gap(material_space::SM)
-            .align(Center)
-            .justify(amane::SpaceBetween),
+            amane::Row::new(row)
+                .width(Parent)
+                .height(Parent)
+                .gap(material_space::SM)
+                .align(Center)
+                .justify(amane::SpaceBetween),
         )
         .on_click(move |_| on_select())
 }
