@@ -160,6 +160,7 @@ fn carousel(
     theme: ThemeColors,
 ) -> Rectangle {
     let center_is_current = current == Some(&selected);
+    let center_candidate = selected.clone();
     let center_card = wallpaper_card(
         selected,
         SELECTED_CARD_WIDTH,
@@ -167,7 +168,7 @@ fn carousel(
         true,
         center_is_current,
         theme,
-        || {},
+        move || apply_wallpaper(center_candidate.clone()),
     );
 
     let mut cards: Vec<Box<dyn amane::Widget>> = Vec::new();
@@ -181,7 +182,7 @@ fn carousel(
             false,
             current == Some(&candidate),
             theme,
-            move || set_preview(candidate.clone()),
+            move || apply_wallpaper(candidate.clone()),
         );
         cards.push(Box::new(
             Column::new(vec![Box::new(card)])
@@ -209,7 +210,7 @@ fn carousel(
             false,
             current == Some(&candidate),
             theme,
-            move || set_preview(candidate.clone()),
+            move || apply_wallpaper(candidate.clone()),
         );
         cards.push(Box::new(
             Column::new(vec![Box::new(card)])
@@ -370,6 +371,8 @@ fn empty_view(theme: ThemeColors) -> Rectangle {
         )
 }
 
-fn set_preview(path: PathBuf) {
-    WallpaperPickerState::write().selected = Some(path);
+fn apply_wallpaper(path: PathBuf) {
+    if let Some(applied) = WallpaperService::select(&path) {
+        WallpaperPickerState::write().selected = Some(applied);
+    }
 }

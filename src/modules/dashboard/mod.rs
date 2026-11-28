@@ -5,9 +5,15 @@ mod size_motion;
 mod visualizer;
 mod wallpapers;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
+};
 
-use amane::{Center, Color, Column, Parent, Pointer, Rectangle, Row, Service};
+use amane::{
+    Animation, Center, Color, Column, Easing, Parent, Pointer, Rectangle, Row, Service, Stack,
+    request_frame,
+};
 
 use crate::material::{
     self, icon as material_icon, shape as material_shape, space as material_space,
@@ -24,6 +30,8 @@ const NAVIGATION_ICON_SIZE: f32 = 24.0;
 const NAVIGATION_HEIGHT: f32 = 195.0;
 const NAVIGATION_GAP: f32 = material_space::SM;
 const PANEL_PADDING: f32 = material_space::LG;
+const TAB_TRANSITION_DURATION: Duration = Duration::from_millis(240);
+const TAB_TRANSITION_DISTANCE: f32 = 28.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum DashboardTab {
@@ -37,6 +45,9 @@ enum DashboardTab {
 #[derive(Default)]
 struct DashboardTabState {
     selected: DashboardTab,
+    previous: Option<DashboardTab>,
+    direction: f32,
+    transition: Option<Animation<f32>>,
 }
 
 impl Service for DashboardTabState {
@@ -45,6 +56,33 @@ impl Service for DashboardTabState {
     }
 
     fn listen() {}
+}
+
+impl DashboardTab {
+    fn index(self) -> u8 {
+        match self {
+            Self::Dash => 0,
+            Self::Media => 1,
+            Self::Performance => 2,
+            Self::Wallpapers => 3,
+        }
+    }
+
+    fn view(self, theme: ThemeColors) -> Rectangle {
+        match self {
+            Self::Dash => dash::view(theme),
+            Self::Media => media::view(theme),
+            Self::Performance => performance::view(theme),
+            Self::Wallpapers => wallpapers::view(theme),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct TabTransition {
+    previous: DashboardTab,
+    progress: f32,
+    direction: f32,
 }
 
 static MEDIA_TAB_VISITED: AtomicBool = AtomicBool::new(false);
@@ -84,12 +122,44 @@ pub fn dashboard_dimensions() -> DashboardDimensions {
 }
 
 fn select_tab(tab: DashboardTab) {
-    let current = selected_tab();
+    let mut state = DashboardTabState::write();
+    let current = state.selected;
     if current == tab {
         return;
     }
 
-    DashboardTabState::write().selected = tab;
+    let mut transition = Animation::new(0.0)
+        .duration(TAB_TRANSITION_DURATION)
+        .easing(Easing::Out);
+    transition.to(1.0);
+
+    state.previous = Some(current);
+    state.direction = if tab.index() > current.index() {
+        1.0
+    } else {
+        -1.0
+    };
+    state.transition = Some(transition);
+    state.selected = tab;
+}
+
+fn tab_transition() -> Option<TabTransition> {
+    let state = DashboardTabState::read();
+    let (Some(previous), Some(animation)) = (state.previous, state.transition.as_ref()) else {
+        return None;
+    };
+
+    let progress = animation.value().clamp(0.0, 1.0);
+    if progress < 1.0 {
+        request_frame();
+        Some(TabTransition {
+            previous,
+            progress,
+            direction: state.direction,
+        })
+    } else {
+        None
+    }
 }
 
 /// Dashboard pages with a compact, vertically centered session selector.
@@ -101,7 +171,10 @@ pub fn dashboard_panel(
 ) -> Rectangle {
     let selected = selected_tab();
     let dimensions = dashboard_dimensions();
-    let media_visible = visible && selected == DashboardTab::Media;
+    let transition = if visible { tab_transition() } else { None };
+    let previous = transition.map(|transition| transition.previous);
+    let media_visible =
+        visible && (selected == DashboardTab::Media || previous == Some(DashboardTab::Media));
 
     if media_visible {
         MEDIA_TAB_VISITED.store(true, Ordering::Relaxed);
@@ -109,7 +182,8 @@ pub fn dashboard_panel(
         media::disable();
     }
 
-    let performance_visible = visible && selected == DashboardTab::Performance;
+    let performance_visible = visible
+        && (selected == DashboardTab::Performance || previous == Some(DashboardTab::Performance));
     if performance_visible {
         PERFORMANCE_TAB_VISITED.store(true, Ordering::Relaxed);
     } else if PERFORMANCE_TAB_VISITED.load(Ordering::Relaxed) {
@@ -120,13 +194,35 @@ pub fn dashboard_panel(
         Rectangle::new()
             .width(dimensions.content_width)
             .height(dimensions.content_height)
+    } else if let Some(transition) = transition {
+        let progress = transition.progress;
+        let direction = transition.direction;
+        let incoming = Rectangle::new()
+            .width(Parent)
+            .height(Parent)
+            .opacity(progress)
+            .translate(0.0, direction * (1.0 - progress) * TAB_TRANSITION_DISTANCE)
+            .align_child(amane::Start, amane::Start)
+            .child(selected.view(theme));
+        let outgoing = Rectangle::new()
+            .width(Parent)
+            .height(Parent)
+            .opacity(1.0 - progress)
+            .translate(0.0, -direction * progress * TAB_TRANSITION_DISTANCE)
+            .align_child(amane::Start, amane::Start)
+            .child(transition.previous.view(theme));
+
+        Rectangle::new()
+            .width(dimensions.content_width)
+            .height(dimensions.content_height)
+            .clip()
+            .child(
+                Stack::new(vec![Box::new(outgoing), Box::new(incoming)])
+                    .width(Parent)
+                    .height(Parent),
+            )
     } else {
-        match selected {
-            DashboardTab::Dash => dash::view(theme),
-            DashboardTab::Media => media::view(theme),
-            DashboardTab::Performance => performance::view(theme),
-            DashboardTab::Wallpapers => wallpapers::view(theme),
-        }
+        selected.view(theme)
     };
 
     let navigation = Column::new(vec![
