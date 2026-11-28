@@ -8,7 +8,7 @@ use amane::{
     TextInput, Widget, request_frame,
 };
 
-use crate::material::{shape as material_shape, space as material_space};
+use crate::material::{self, shape as material_shape, space as material_space};
 use crate::motion::{Motion, PanelId, TRIGGER_HOVER_LEAVE_GRACE};
 use crate::rail_battery::RailBattery;
 use crate::theme::ThemeColors;
@@ -229,17 +229,17 @@ fn smoothstep(value: f32) -> f32 {
 
 fn section_height(section: StatusSection, network: &Network, bluetooth: &Bluetooth) -> f32 {
     match section {
-        StatusSection::Battery => 280.0,
+        StatusSection::Battery => 324.0,
         StatusSection::Wifi => {
             let networks = network.access_points().len().min(6) as f32;
-            (244.0 + networks * 40.0).clamp(260.0, 500.0)
+            (310.0 + networks * 40.0).clamp(310.0, 570.0)
         }
         StatusSection::Bluetooth => {
             let devices = bluetooth.devices().len().min(7) as f32;
             let controls = if bluetooth.powered() { 2.0 } else { 1.0 };
-            (162.0 + (devices + controls) * 42.0).clamp(230.0, 500.0)
+            (176.0 + (devices + controls) * 48.0).clamp(260.0, 560.0)
         }
-        StatusSection::Audio => 370.0,
+        StatusSection::Audio => 440.0,
     }
 }
 
@@ -261,25 +261,36 @@ fn section_content(
 }
 
 fn battery_content(theme: ThemeColors, battery: &RailBattery) -> Rectangle {
-    let mut children: Vec<Box<dyn Widget>> = vec![Box::new(label("BATERIA", theme.accent, 12.0))];
-    children.push(Box::new(label(
+    let mut children: Vec<Box<dyn Widget>> = vec![Box::new(section_header(
+        material::icon::BATTERY_VERTICAL_FULL,
+        "Bateria",
         if battery.present {
-            format!(
-                "{}%{}",
-                battery.percent,
-                if battery.charging {
-                    " · carregando"
-                } else {
-                    ""
-                }
-            )
+            "Energia e perfil de consumo"
         } else {
-            "Bateria indisponível".to_owned()
+            "Estado de energia indisponível"
         },
-        theme.text,
-        20.0,
+        theme,
+    ))];
+    let summary = if battery.present {
+        format!(
+            "{}%{}",
+            battery.percent,
+            if battery.charging {
+                " · carregando"
+            } else {
+                ""
+            }
+        )
+    } else {
+        "Sem bateria detectada".to_owned()
+    };
+    children.push(Box::new(info_row(
+        material::icon::BOLT,
+        "Carga atual",
+        &summary,
+        theme,
     )));
-    children.push(Box::new(label("PERFIL DE ENERGIA", theme.accent, 12.0)));
+    children.push(Box::new(label("Perfil de energia", theme.muted, 12.0)));
     for (profile, title) in [
         ("power-saver", "Economia"),
         ("balanced", "Balanceado"),
@@ -299,7 +310,12 @@ fn battery_content(theme: ThemeColors, battery: &RailBattery) -> Rectangle {
 }
 
 fn wifi_content(theme: ThemeColors, network: &Network, active: bool) -> Rectangle {
-    let mut children: Vec<Box<dyn Widget>> = vec![Box::new(label("WI-FI", theme.accent, 12.0))];
+    let mut children: Vec<Box<dyn Widget>> = vec![Box::new(section_header(
+        material::icon::WIFI,
+        "Wi-Fi",
+        "Redes sem fio próximas",
+        theme,
+    ))];
     let wifi_enabled = network.wifi_enabled();
     children.push(Box::new(action(
         if wifi_enabled {
@@ -310,18 +326,32 @@ fn wifi_content(theme: ThemeColors, network: &Network, active: bool) -> Rectangl
         theme,
         move || Network::set_wifi(!wifi_enabled),
     )));
-    children.push(Box::new(label(
+    let connection_detail = if network.connected() {
+        format!("Conectado a {}", network.ssid())
+    } else if network.wifi_enabled() {
+        "Desconectado".to_owned()
+    } else {
+        "Wi-Fi desligado".to_owned()
+    };
+    children.push(Box::new(info_row(
         if network.connected() {
-            format!("Conectado a {}", network.ssid())
-        } else if network.wifi_enabled() {
-            "Desconectado".into()
+            material::icon::WIFI
         } else {
-            "Wi-Fi desligado".into()
+            material::icon::WIFI_OFF
         },
-        theme.text,
-        16.0,
+        "Estado da conexão",
+        &connection_detail,
+        theme,
     )));
+    children.push(Box::new(label("Redes disponíveis", theme.muted, 12.0)));
     children.push(Box::new(action("Buscar redes", theme, Network::scan)));
+    if network.access_points().is_empty() {
+        children.push(Box::new(label(
+            "Nenhuma rede encontrada",
+            theme.muted,
+            13.0,
+        )));
+    }
     for point in network.access_points().iter().take(6) {
         let ssid = point.ssid().to_owned();
         let saved = point.saved();
@@ -367,7 +397,12 @@ fn wifi_content(theme: ThemeColors, network: &Network, active: bool) -> Rectangl
 }
 
 fn bluetooth_content(theme: ThemeColors, bluetooth: &Bluetooth) -> Rectangle {
-    let mut children: Vec<Box<dyn Widget>> = vec![Box::new(label("BLUETOOTH", theme.accent, 12.0))];
+    let mut children: Vec<Box<dyn Widget>> = vec![Box::new(section_header(
+        material::icon::BLUETOOTH,
+        "Bluetooth",
+        "Dispositivos próximos",
+        theme,
+    ))];
     let powered = bluetooth.powered();
     children.push(Box::new(action(
         if powered {
@@ -388,6 +423,13 @@ fn bluetooth_content(theme: ThemeColors, bluetooth: &Bluetooth) -> Rectangle {
             theme,
             Bluetooth::start_scan,
         )));
+        if bluetooth.devices().is_empty() {
+            children.push(Box::new(label(
+                "Nenhum dispositivo encontrado",
+                theme.muted,
+                13.0,
+            )));
+        }
     }
     for device in bluetooth.devices().iter().take(7) {
         let path = device.path().to_owned();
@@ -419,17 +461,23 @@ fn bluetooth_content(theme: ThemeColors, bluetooth: &Bluetooth) -> Rectangle {
 
 fn audio_content(theme: ThemeColors, audio: &Audio) -> Rectangle {
     let mut children: Vec<Box<dyn Widget>> = vec![
-        Box::new(label("ÁUDIO", theme.accent, 12.0)),
-        Box::new(label("SAÍDA", theme.accent, 11.0)),
+        Box::new(section_header(
+            material::icon::VOLUME_UP,
+            "Áudio",
+            "Dispositivos e níveis de volume",
+            theme,
+        )),
+        Box::new(label("Saída", theme.muted, 12.0)),
     ];
-    children.push(Box::new(label(
-        format!(
-            "Volume de saída · {}%{}",
+    children.push(Box::new(info_row(
+        material::icon::VOLUME_UP,
+        "Volume de saída",
+        &format!(
+            "{}%{}",
             audio.volume(),
             if audio.muted() { " · mudo" } else { "" }
         ),
-        theme.text,
-        15.0,
+        theme,
     )));
     children.push(Box::new(adjust_row(audio.volume(), false, theme)));
     children.push(Box::new(action(
@@ -441,10 +489,16 @@ fn audio_content(theme: ThemeColors, audio: &Audio) -> Rectangle {
         theme,
         Audio::toggle_mute,
     )));
-    children.push(Box::new(label("ENTRADA", theme.accent, 11.0)));
-    children.push(Box::new(label(
-        format!(
-            "Microfone · {}%{}",
+    children.push(Box::new(label("Entrada", theme.muted, 12.0)));
+    children.push(Box::new(info_row(
+        if audio.microphone_muted() {
+            material::icon::MIC_OFF
+        } else {
+            material::icon::MIC
+        },
+        "Microfone",
+        &format!(
+            "{}%{}",
             audio.microphone_volume(),
             if audio.microphone_muted() {
                 " · mudo"
@@ -452,8 +506,7 @@ fn audio_content(theme: ThemeColors, audio: &Audio) -> Rectangle {
                 ""
             }
         ),
-        theme.text,
-        15.0,
+        theme,
     )));
     children.push(Box::new(adjust_row(audio.microphone_volume(), true, theme)));
     children.push(Box::new(action(
@@ -497,20 +550,111 @@ fn card_content(children: Vec<Box<dyn Widget>>, _theme: ThemeColors) -> Rectangl
                 .width(Parent)
                 .height(Parent)
                 .gap(material_space::SM)
+                .align(amane::Start)
+                .justify(amane::Start),
+        )
+}
+
+fn section_header(
+    icon: &'static str,
+    title: &str,
+    subtitle: &str,
+    theme: ThemeColors,
+) -> Rectangle {
+    let icon_tile = Rectangle::new()
+        .width(44.0)
+        .height(44.0)
+        .fill(Color::TRANSPARENT)
+        .align_child(Center, Center)
+        .child(
+            Stack::new(vec![
+                Box::new(
+                    Rectangle::new()
+                        .width(Parent)
+                        .height(Parent)
+                        .radius(material_shape::CONTROL)
+                        .fill(theme.accent)
+                        .opacity(0.18),
+                ),
+                Box::new(crate::material::icon(icon, 22.0, theme.accent)),
+            ])
+            .width(Parent)
+            .height(Parent),
+        );
+    let text = Column::new(vec![
+        Box::new(Text::new(title.to_owned()).size(20.0).color(theme.text)),
+        Box::new(Text::new(subtitle.to_owned()).size(12.0).color(theme.muted)),
+    ])
+    .width(Parent)
+    .height(44.0)
+    .gap(material_space::XS)
+    .align(amane::Start)
+    .justify(Center);
+
+    Rectangle::new()
+        .width(Parent)
+        .height(48.0)
+        .align_child(amane::Start, Center)
+        .child(
+            amane::Row::new(vec![Box::new(icon_tile), Box::new(text)])
+                .width(Parent)
+                .height(Parent)
+                .gap(material_space::MD)
                 .align(Center)
                 .justify(amane::Start),
+        )
+}
+
+fn info_row(icon: &'static str, title: &str, detail: &str, theme: ThemeColors) -> Rectangle {
+    Rectangle::new()
+        .width(Parent)
+        .height(56.0)
+        .radius(material_shape::CONTROL)
+        .fill(theme.button_surface)
+        .padding(material_space::SM)
+        .align_child(amane::Start, Center)
+        .child(
+            amane::Row::new(vec![
+                Box::new(crate::material::icon(icon, 20.0, theme.accent)),
+                Box::new(
+                    Column::new(vec![
+                        Box::new(Text::new(title.to_owned()).size(12.0).color(theme.muted)),
+                        Box::new(Text::new(detail.to_owned()).size(14.0).color(theme.text)),
+                    ])
+                    .width(Parent)
+                    .height(Parent)
+                    .gap(material_space::XS)
+                    .align(amane::Start)
+                    .justify(Center),
+                ),
+            ])
+            .width(Parent)
+            .height(Parent)
+            .gap(material_space::MD)
+            .align(Center)
+            .justify(amane::Start),
         )
 }
 
 fn action(title: &str, theme: ThemeColors, on_click: impl Fn() + 'static) -> Rectangle {
     Rectangle::new()
         .width(Parent)
-        .height(36.0)
+        .height(40.0)
         .radius(material_shape::CONTROL)
-        .fill(theme.workspace_group_surface)
+        .fill(theme.button_surface)
         .cursor(amane::Pointer)
         .padding(material_space::SM)
-        .child(label(title.to_owned(), theme.text, 14.0))
+        .align_child(amane::Start, Center)
+        .child(
+            amane::Row::new(vec![
+                Box::new(Text::new(title.to_owned()).size(14.0).color(theme.text)),
+                Box::new(Text::new("›").size(20.0).color(theme.muted)),
+            ])
+            .width(Parent)
+            .height(Parent)
+            .align(Center)
+            .justify(amane::SpaceBetween),
+        )
         .on_click(move |_| on_click())
 }
 

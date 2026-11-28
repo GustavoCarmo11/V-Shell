@@ -44,7 +44,7 @@ const WORKSPACE_GAP: f32 = 8.50;
 // Extra vertical room belongs to the outer background only, not between icons.
 const WORKSPACE_GROUP_VERTICAL_PADDING: f32 = 16.0;
 const BOTTOM_ACTIONS_HEIGHT: f32 = 224.0;
-const BOTTOM_CLOCK_HEIGHT: f32 = 48.0;
+const BOTTOM_CLOCK_HEIGHT: f32 = 56.0;
 const BOTTOM_CLOCK_GAP: f32 = 28.0;
 const BOTTOM_SECTION_HEIGHT: f32 = BOTTOM_ACTIONS_HEIGHT + BOTTOM_CLOCK_HEIGHT + BOTTOM_CLOCK_GAP;
 const BORDER_SIZE: f32 = 14.0;
@@ -525,7 +525,7 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     let regular_target_height = if workspace_count == 0 {
         WORKSPACE_INDICATOR_SIZE
     } else {
-        workspace_count as f32 * 29.0
+        workspace_count as f32 * 25.0
             + workspace_count.saturating_sub(1) as f32 * WORKSPACE_GAP
             + 7.0
     };
@@ -559,15 +559,15 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     } else {
         workspace_progresses
             .iter()
-            .map(|progress| 29.0 + 7.0 * progress.clamp(-0.10, 1.10))
+            .map(|progress| 25.0 + 7.0 * progress.clamp(-0.10, 1.10))
             .sum::<f32>()
             + workspace_count.saturating_sub(1) as f32 * WORKSPACE_GAP
     };
 
     let mut workspace_buttons: Vec<Box<dyn Widget>> = Vec::new();
-    // Center the content's current animated height inside its size-targeted
-    // surface, which includes the normal outer padding.
-    let workspace_content_offset_y = ((workspace_group_height - regular_height) * 0.5).max(0.0);
+    // Keep existing pills anchored at a fixed top inset while the group surface
+    // grows or shrinks. Recentering the column would move every pill on count changes.
+    let workspace_content_offset_y = WORKSPACE_GROUP_VERTICAL_PADDING * 0.5;
 
     if special_progress < 0.999 {
         for (workspace, active_progress) in
@@ -653,11 +653,18 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     .align(Center)
     .justify(Start);
 
-    // The active-window title uses the free vertical space between the
-    // workspaces and the bottom action plate, like Caelestia's bar component.
-    let window_area_height =
-        (height - 12.0 - (20.0 + workspace_group_height) - BOTTOM_SECTION_HEIGHT).max(80.0);
-    let window_section = active_window_area(theme, window_area_height);
+    // Keep the title centered in the rail; cap its vertical text span to the
+    // clear space between the workspace group and the bottom controls.
+    let rail_content_height = (height - 12.0).max(0.0);
+    let rail_center = rail_content_height * 0.5;
+    let workspace_bottom = 18.0 + workspace_group_height;
+    let bottom_top = rail_content_height - BOTTOM_SECTION_HEIGHT;
+    let centered_title_span = (2.0
+        * (rail_center - workspace_bottom)
+            .min(bottom_top - rail_center)
+            .max(0.0))
+    .max(48.0);
+    let window_section = active_window_area(theme, rail_content_height, centered_title_span);
 
     // A shared surface groups the bottom actions; each icon itself stays
     // transparent and uses the high-contrast on-surface color.
@@ -749,15 +756,21 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
                 .width(Parent)
                 .height(Parent)
                 .child(
-                    Column::new(vec![
-                        Box::new(workspace_section),
+                    Stack::new(vec![
+                        Box::new(
+                            Column::new(vec![
+                                Box::new(workspace_section),
+                                Box::new(bottom_section),
+                            ])
+                            .width(Parent)
+                            .height(Parent)
+                            .align(Center)
+                            .justify(SpaceBetween),
+                        ),
                         Box::new(window_section),
-                        Box::new(bottom_section),
                     ])
                     .width(Parent)
-                    .height(Parent)
-                    .align(Center)
-                    .justify(SpaceBetween),
+                    .height(Parent),
                 )
                 // The content was a couple of pixels right of the visual center.
                 .translate(-2.0, 0.0),
@@ -776,7 +789,7 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: 
     let morph = active_progress.clamp(-0.10, 1.10);
     let active_opacity = active_progress.clamp(0.0, 1.0);
     let width = 16.0 + 2.0 * morph;
-    let indicator_height = 29.0 + 7.0 * morph;
+    let indicator_height = 25.0 + 7.0 * morph;
     let radius = indicator_height * 0.5;
     let x = (WORKSPACE_INDICATOR_SIZE - width) * 0.5;
     let y = 0.0;
@@ -816,7 +829,7 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: 
         })
 }
 
-fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
+fn active_window_area(theme: ThemeColors, rail_height: f32, title_span: f32) -> Rectangle {
     let window = ActiveWindow::current();
     let title = window
         .as_ref()
@@ -824,14 +837,13 @@ fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
         .filter(|title| !title.trim().is_empty())
         .unwrap_or("Desktop");
 
-    // Caelestia rotates a single title label by 90 degrees and elides it to
-    // the available vertical space. This shell keeps only the text (no icon)
-    // and uses a character cap as a predictable approximation of text metrics.
+    // Caelestia rotates a single title label by 90 degrees. Keep the label
+    // centered and use its clear vertical span to cap text without overlap.
     let font_size = 17.0;
     // Approximate Caelestia's pixel-based TextMetrics elision: reserve a little
     // vertical breathing room, estimate average glyph width, and cap long
     // titles so they do not dominate the rail.
-    let text_length = (available_height - 18.0).max(font_size);
+    let text_length = (title_span - 18.0).max(font_size);
     let estimated_glyph_width = font_size * 0.68;
     let max_chars = (text_length / estimated_glyph_width)
         .floor()
@@ -849,7 +861,7 @@ fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
             let previous_label = compact_window_label(&previous_title, max_chars);
             title_layers.push(Box::new(
                 Rectangle::new()
-                    .width(available_height)
+                    .width(title_span)
                     .height(48.0)
                     .fill(Color::TRANSPARENT)
                     .opacity(outgoing_opacity)
@@ -867,7 +879,7 @@ fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
     let title_label = compact_window_label(title, max_chars);
     title_layers.push(Box::new(
         Rectangle::new()
-            .width(available_height)
+            .width(title_span)
             .height(48.0)
             .fill(Color::TRANSPARENT)
             .opacity(incoming_opacity)
@@ -883,19 +895,15 @@ fn active_window_area(theme: ThemeColors, available_height: f32) -> Rectangle {
     // Lay out both labels in one fixed slot, then rotate them together so
     // their crossfade cannot shift the vertical alignment of the title.
     let rotated_line = Rectangle::new()
-        .width(available_height)
+        .width(title_span)
         .height(48.0)
         .fill(Color::TRANSPARENT)
-        .child(
-            Stack::new(title_layers)
-                .width(available_height)
-                .height(48.0),
-        )
+        .child(Stack::new(title_layers).width(title_span).height(48.0))
         .rotate(90.0);
 
     Rectangle::new()
         .width(Parent)
-        .height(available_height)
+        .height(rail_height)
         .fill(Color::TRANSPARENT)
         .clip()
         .align_child(Center, Center)
@@ -990,7 +998,7 @@ fn rail_clock(theme: ThemeColors) -> Rectangle {
             ])
             .width(Parent)
             .height(Parent)
-            .gap(material_space::XS)
+            .gap(material_space::SM)
             .align(Center)
             .justify(Center),
         )
