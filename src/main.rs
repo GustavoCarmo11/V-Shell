@@ -31,7 +31,7 @@ use motion::{Motion, PanelId};
 use rail_battery::RailBattery;
 use rail_clock::RailClock;
 use special_workspace::SpecialWorkspace;
-use status_popouts::status_popouts;
+use status_popouts::{StatusSection, active_section, status_popout, status_trigger};
 use theme::{Theme, ThemeColors, ThemeMode};
 use wallpaper::WallpaperService;
 use workspace_motion::WorkspaceMotion;
@@ -218,6 +218,13 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
     let launcher_panel_left = ((monitor.width as f32 - LAUNCHER_WIDTH) / 2.0).max(0.0);
     let launcher_panel_top = monitor.height as f32 - launcher_travel * launcher_progress;
 
+    let status_panel = status_popout(
+        theme,
+        monitor.width as f32,
+        monitor.height as f32,
+        BORDER_SIZE,
+    );
+
     // Keep each invisible origin target only on the part of the edge that is
     // not already covered by its moving panel. This lets the panel itself own
     // hover events as soon as it reaches the pointer.
@@ -252,14 +259,8 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         },
     ];
 
-    let status_panel_open = [
-        PanelId::QuickSettings,
-        PanelId::Wifi,
-        PanelId::Bluetooth,
-        PanelId::Audio,
-    ]
-    .into_iter()
-    .any(|panel| Motion::is_open(panel) || Motion::progress(panel) > 0.001);
+    let status_panel_open =
+        Motion::is_open(PanelId::QuickSettings) || status_panel.progress > 0.001;
     if status_panel_open {
         let panel_region_height = 600.0_f32.min(monitor.height as f32);
         input_areas.push(InputArea {
@@ -379,6 +380,9 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
             launcher_deformation.ky,
             launcher_deformation.sy,
         ],
+        status_panel.shader_values[0],
+        status_panel.shader_values[1],
+        status_panel.shader_values[2],
     ];
 
     let surface_layer = Rectangle::new()
@@ -423,8 +427,6 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
                 .translate(0.0, launcher_translate_y),
         ));
 
-    let status_layers = status_popouts(theme, monitor.width as f32, monitor.height as f32);
-
     // Hover is detected at each module's origin in the perimeter, not on rail icons.
     // Dashboard starts at the top-center edge.
     let dashboard_origin_hover = Motion::trigger_hover(
@@ -457,7 +459,10 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
         // The layer surface only takes keyboard focus while the Launcher is open.
         // Exclusive is necessary because OnDemand would require a click first.
         .keyboard(
-            if LauncherState::is_open() || Motion::is_open(PanelId::Wifi) {
+            if LauncherState::is_open()
+                || (Motion::is_open(PanelId::QuickSettings)
+                    && active_section() == StatusSection::Wifi)
+            {
                 Keyboard::Exclusive
             } else {
                 Keyboard::None
@@ -482,7 +487,7 @@ fn content_window(monitor: &Monitor) -> LayerWindow {
                         Box::new(rail_layer),
                         Box::new(dashboard_layer),
                         Box::new(launcher_layer),
-                        Box::new(status_layers),
+                        Box::new(status_panel.widget),
                         Box::new(dashboard_origin_hover),
                         Box::new(launcher_origin_hover),
                     ])
@@ -681,7 +686,7 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
                 material::icon::VOLUME_UP
             },
             theme,
-            PanelId::Audio,
+            StatusSection::Audio,
         )),
         Box::new(status_button(
             if audio.microphone_muted() {
@@ -690,7 +695,7 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
                 material::icon::MIC
             },
             theme,
-            PanelId::Audio,
+            StatusSection::Audio,
         )),
         Box::new(status_button(
             if network.wifi_enabled() {
@@ -699,7 +704,7 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
                 material::icon::WIFI_OFF
             },
             theme,
-            PanelId::Wifi,
+            StatusSection::Wifi,
         )),
         Box::new(status_button(
             if !bluetooth.powered() {
@@ -710,12 +715,12 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
                 material::icon::BLUETOOTH
             },
             theme,
-            PanelId::Bluetooth,
+            StatusSection::Bluetooth,
         )),
     ];
     if battery.present {
-        bottom_action_widgets.push(Box::new(Motion::trigger_hover(
-            PanelId::QuickSettings,
+        bottom_action_widgets.push(Box::new(status_trigger(
+            StatusSection::Battery,
             battery_indicator(battery.percent, battery.charging, theme),
         )));
     }
@@ -781,7 +786,7 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: 
     let morph = active_progress.clamp(-0.10, 1.10);
     let active_opacity = active_progress.clamp(0.0, 1.0);
     let width = 16.0 + 2.0 * morph;
-    let indicator_height = 30.0 + 6.0 * morph;
+    let indicator_height = 29.0 + 7.0 * morph;
     let radius = indicator_height * 0.5;
     let x = (WORKSPACE_INDICATOR_SIZE - width) * 0.5;
     let y = (WORKSPACE_INDICATOR_SIZE - indicator_height) * 0.5;
@@ -935,7 +940,7 @@ fn icon_button(icon: &'static str, theme: ThemeColors) -> Rectangle {
         .fill(Color::TRANSPARENT)
         .cursor(Pointer)
         .align_child(Center, Center)
-        .child(material_icon(icon, 20.0, theme.text))
+        .child(material_icon(icon, 20.0, theme.accent))
 }
 
 fn battery_indicator(percent: u8, charging: bool, theme: ThemeColors) -> Rectangle {
@@ -1020,9 +1025,9 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
 // SESSION
 // --------------------------------------------------
 
-fn status_button(icon: &'static str, theme: ThemeColors, panel: PanelId) -> Rectangle {
-    Motion::trigger_hover(
-        panel,
+fn status_button(icon: &'static str, theme: ThemeColors, section: StatusSection) -> Rectangle {
+    status_trigger(
+        section,
         Rectangle::new()
             .width(32.0)
             .height(32.0)

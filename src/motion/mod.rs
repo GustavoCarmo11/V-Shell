@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use amane::{Rectangle, Service, Transform, request_frame};
 
 use self::deformation::BlobDeformer;
-use self::presets::{LAUNCHER_CLOSE, LAUNCHER_OPEN, PANEL_CLOSE, PANEL_OPEN};
+use self::presets::{LAUNCHER_CLOSE, LAUNCHER_OPEN, PANEL_CLOSE, PANEL_OPEN, STATUS_CLOSE};
 use self::spring::Spring;
 
 /// Delay that bridges gaps between the rail trigger and a panel's hit region.
@@ -27,20 +27,14 @@ pub enum PanelId {
     Launcher,
     QuickSettings,
     Media,
-    Wifi,
-    Bluetooth,
-    Audio,
 }
 
 impl PanelId {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 4] = [
         Self::Dashboard,
         Self::Launcher,
         Self::QuickSettings,
         Self::Media,
-        Self::Wifi,
-        Self::Bluetooth,
-        Self::Audio,
     ];
 }
 
@@ -258,6 +252,7 @@ impl Motion {
         let (target, config) = match (panel, open) {
             (PanelId::Launcher, true) => (1.0, LAUNCHER_OPEN),
             (PanelId::Launcher, false) => (0.0, LAUNCHER_CLOSE),
+            (PanelId::QuickSettings, false) => (0.0, STATUS_CLOSE),
             (_, true) => (1.0, PANEL_OPEN),
             (_, false) => (0.0, PANEL_CLOSE),
         };
@@ -290,6 +285,7 @@ impl Motion {
 
                 let (target, config) = match panel {
                     PanelId::Launcher => (0.0, LAUNCHER_CLOSE),
+                    PanelId::QuickSettings => (0.0, STATUS_CLOSE),
                     _ => (0.0, PANEL_CLOSE),
                 };
 

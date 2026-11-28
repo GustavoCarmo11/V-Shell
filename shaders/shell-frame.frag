@@ -10,6 +10,9 @@
 // values[5] = Launcher x, y, width, height
 // values[6] = Launcher radius, progress, merge radius, reserved
 // values[7] = Launcher affine deformation matrix: m00, m01, m10, m11
+// values[8] = Status pop-out x, y, width, height
+// values[9] = Status pop-out radius, progress, merge radius, reserved
+// values[10] = Status pop-out affine deformation matrix: m00, m01, m10, m11
 
 float sdRoundedBoxPerCorner(
     vec2 p,
@@ -138,6 +141,42 @@ void main() {
 
         float launcherMerge = values[6].z * smoothstep(0.0, 0.0, launcherProgress);
         shapeDistance = smoothMin(shapeDistance, launcherDistance, launcherMerge);
+    }
+
+    // Status pop-outs share one surface with the rail. Their left corners are
+    // square so the morphing SDF can join the panel to the bar without a seam.
+    vec4 statusPanel = values[8];
+    vec4 statusStyle = values[9];
+    float statusProgress = clamp(statusStyle.y, 0.0, 1.0);
+    if (statusProgress > 0.001) {
+        vec2 statusSize = statusPanel.zw;
+        vec2 statusCenter = statusPanel.xy + statusSize * 0.5;
+        vec2 statusDelta = p - statusCenter;
+
+        float sm00 = values[10].x;
+        float sm01 = values[10].y;
+        float sm10 = values[10].z;
+        float sm11 = values[10].w;
+        float statusDeterminant = sm00 * sm11 - sm01 * sm10;
+        statusDeterminant = abs(statusDeterminant) < 0.0001
+            ? 1.0
+            : statusDeterminant;
+
+        vec2 statusLocal = vec2(
+            (sm11 * statusDelta.x - sm01 * statusDelta.y) / statusDeterminant,
+            (-sm10 * statusDelta.x + sm00 * statusDelta.y) / statusDeterminant
+        );
+
+        float statusRadius = statusStyle.x;
+        float statusDistance = sdRoundedBoxPerCorner(
+            statusLocal,
+            statusSize * 0.5,
+            0.0,
+            statusRadius,
+            0.0,
+            0.0
+        );
+        shapeDistance = smoothMin(shapeDistance, statusDistance, statusStyle.z);
     }
 
     float aa = max(fwidth(shapeDistance), 0.65);

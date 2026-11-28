@@ -8,6 +8,16 @@ pub const PANEL_OPEN: SpringConfig = SpringConfig::panel_open();
 /// Quicker closing profile with controlled damping.
 pub const PANEL_CLOSE: SpringConfig = SpringConfig::panel_close();
 
+/// Status pop-outs return to the rail a little faster than full-size panels.
+pub const STATUS_CLOSE: SpringConfig = SpringConfig {
+    stiffness: 240.0,
+    damping: 30.0,
+    mass: 1.0,
+    rest_delta: 0.0015,
+    rest_speed: 0.02,
+    max_duration: Duration::from_millis(1000),
+};
+
 /// Launcher opening is about 25% slower than the previous Launcher profile.
 pub const LAUNCHER_OPEN: SpringConfig = SpringConfig {
     stiffness: 165.0,

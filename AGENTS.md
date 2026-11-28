@@ -8,6 +8,8 @@ V-Shell is a Caelestia-inspired Rust Wayland shell built with Amane, Vello/WGPU 
 
 `src/main.rs` composes per-monitor windows. `src/modules/dashboard/` contains Dashboard pages; `src/motion/` contains spring and deformation logic. Other `src/` modules implement launcher, theme, wallpapers and system indicators. `shaders/shell-frame.frag` draws the frame; `color-worker/` is a separate binary. Motion tests live beside their code in `src/motion/`.
 
+Rail status pop-outs share `PanelId::QuickSettings`; keep their animated bounds and deformation uniforms synchronized between `src/status_popouts.rs`, `src/main.rs` and `shaders/shell-frame.frag` so the pop-out remains joined to the shell surface.
+
 Use Amane widgets for UI and `Service` implementations for reactive state. Keep state updates distinct from rendering. Hyprland events use Unix sockets.
 
 ## Amane Fork
