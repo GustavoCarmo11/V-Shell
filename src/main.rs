@@ -4,15 +4,17 @@ mod launcher;
 mod material;
 mod modules;
 mod motion;
+mod rail_battery;
+mod rail_clock;
 mod special_workspace;
 mod theme;
 mod wallpaper;
 mod workspace_motion;
 
 use amane::{
-    App, Apps, Battery, Center, Color, Column, End, Full, Horizontal, Image, InputArea, Keyboard,
-    Layer, LayerWindow, Monitor, Parent, Pointer, Rectangle, Service, SpaceBetween, Stack, Start,
-    Text, Vertical, Widget, Workspace, Workspaces, Zone,
+    App, Apps, Center, Color, Column, End, Full, Horizontal, Image, InputArea, Keyboard, Layer,
+    LayerWindow, Monitor, Parent, Pointer, Rectangle, Service, SpaceBetween, Stack, Start, Text,
+    Vertical, Widget, Workspace, Workspaces, Zone,
 };
 
 use active_window::ActiveWindow;
@@ -25,6 +27,8 @@ use modules::dashboard::{
     dashboard_dimensions, dashboard_panel, dashboard_size_sample, set_dashboard_size_target,
 };
 use motion::{Motion, PanelId};
+use rail_battery::RailBattery;
+use rail_clock::RailClock;
 use special_workspace::SpecialWorkspace;
 use theme::{Theme, ThemeColors, ThemeMode};
 use wallpaper::WallpaperService;
@@ -36,6 +40,9 @@ const WORKSPACE_INDICATOR_SIZE: f32 = 44.0;
 const WORKSPACE_GAP: f32 = 3.0;
 // Extra vertical room belongs to the outer background only, not between icons.
 const WORKSPACE_GROUP_VERTICAL_PADDING: f32 = 16.0;
+const BOTTOM_ACTIONS_HEIGHT: f32 = 132.0;
+const BOTTOM_CLOCK_HEIGHT: f32 = 42.0;
+const BOTTOM_SECTION_HEIGHT: f32 = BOTTOM_ACTIONS_HEIGHT + BOTTOM_CLOCK_HEIGHT + 8.0;
 const BORDER_SIZE: f32 = 14.0;
 const BORDER_RADIUS: f32 = 24.0;
 const INNER_LEFT_RADIUS: f32 = 30.0;
@@ -532,8 +539,8 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
             let first_morph = workspace_progresses[0].clamp(-0.10, 1.10);
             let last_morph =
                 workspace_progresses[workspace_progresses.len() - 1].clamp(-0.10, 1.10);
-            let first_height = 30.0 + 10.0 * first_morph;
-            let last_height = 30.0 + 10.0 * last_morph;
+            let first_height = 24.0 + 16.0 * first_morph;
+            let last_height = 24.0 + 16.0 * last_morph;
             let first_inset = (WORKSPACE_INDICATOR_SIZE - first_height) * 0.5;
             let last_inset = (WORKSPACE_INDICATOR_SIZE - last_height) * 0.5;
 
@@ -625,26 +632,23 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
 
     // The active-window title uses the free vertical space between the
     // workspaces and the bottom action plate, like Caelestia's bar component.
-    let window_area_height = (height - 12.0 - (20.0 + workspace_group_height) - 132.0).max(80.0);
+    let window_area_height =
+        (height - 12.0 - (20.0 + workspace_group_height) - BOTTOM_SECTION_HEIGHT).max(80.0);
     let window_section = active_window_area(theme, window_area_height);
 
-    // One shared background behind both bottom actions, using the exact
-    // surface colour of the active workspace indicator. Individual buttons
-    // remain transparent.
-    let battery = Battery::read();
+    // A shared surface groups the bottom actions; each icon itself stays
+    // transparent and uses the high-contrast on-surface color.
+    let battery = RailBattery::snapshot();
     let mut bottom_action_widgets: Vec<Box<dyn Widget>> = vec![
         Box::new(theme_button(theme)),
         Box::new(session_button(theme)),
     ];
-    if battery.present() {
-        let icon = if battery.charging() {
-            material::icon::BATTERY_CHARGING
-        } else if battery.percent() <= 15 {
-            material::icon::BATTERY_LOW
-        } else {
-            material::icon::BATTERY_FULL
-        };
-        bottom_action_widgets.push(Box::new(icon_button(icon, theme.active_surface)));
+    if battery.present {
+        bottom_action_widgets.push(Box::new(battery_indicator(
+            battery.percent,
+            battery.charging,
+            theme,
+        )));
     }
     let bottom_actions = Column::new(bottom_action_widgets)
         .width(Parent)
@@ -653,14 +657,23 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
         .align(Center)
         .justify(Center);
 
-    let bottom_section = Rectangle::new()
+    let bottom_actions_plate = Rectangle::new()
         .width(36.0)
-        .height(132.0)
+        .height(BOTTOM_ACTIONS_HEIGHT)
         .radius(material_shape::CARD)
         .fill(theme.workspace_group_surface)
         .opacity(1.0)
         .align_child(Center, Center)
         .child(bottom_actions);
+    let bottom_section = Column::new(vec![
+        Box::new(rail_clock(theme)),
+        Box::new(bottom_actions_plate),
+    ])
+    .width(Parent)
+    .height(BOTTOM_SECTION_HEIGHT)
+    .gap(material_space::SM)
+    .align(Center)
+    .justify(Center);
 
     Rectangle::new()
         .width(RAIL_WIDTH)
@@ -694,12 +707,12 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
 fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: f32) -> Rectangle {
     let id = workspace.id();
 
-    // Keep the existing Waybar-inspired morph, but make the indicators
-    // narrower and remove their numeric labels entirely.
+    // Inactive workspaces rest as compact pills; the active one grows taller
+    // and wider while retaining the same capsule shape.
     let morph = active_progress.clamp(-0.10, 1.10);
     let active_opacity = active_progress.clamp(0.0, 1.0);
-    let width = 14.0 + 3.0 * morph;
-    let indicator_height = 30.0 + 10.0 * morph;
+    let width = 12.0 + 4.0 * morph;
+    let indicator_height = 24.0 + 12.0 * morph;
     let radius = indicator_height * 0.5;
     let x = (WORKSPACE_INDICATOR_SIZE - width) * 0.5;
     let y = (WORKSPACE_INDICATOR_SIZE - indicator_height) * 0.5;
@@ -840,14 +853,92 @@ fn compact_window_label(value: &str, max_chars: usize) -> String {
 // ICON BUTTON
 // --------------------------------------------------
 
-fn icon_button(icon: &'static str, foreground: Color) -> Rectangle {
+fn icon_button(icon: &'static str, theme: ThemeColors) -> Rectangle {
     Rectangle::new()
         .width(32.0)
-        .height(38.0)
+        .height(32.0)
         .fill(Color::TRANSPARENT)
         .cursor(Pointer)
         .align_child(Center, Center)
-        .child(material_icon(icon, 19.0, foreground))
+        .child(material_icon(icon, 20.0, theme.text))
+}
+
+fn battery_indicator(percent: u8, charging: bool, theme: ThemeColors) -> Rectangle {
+    const BODY_WIDTH: f32 = 20.0;
+    const BODY_HEIGHT: f32 = 14.0;
+    const INNER_WIDTH: f32 = 15.0;
+    const INNER_HEIGHT: f32 = 6.0;
+
+    let level_width = INNER_WIDTH * (percent.min(100) as f32 / 100.0);
+    let mut layers: Vec<Box<dyn Widget>> = vec![
+        Box::new(
+            Rectangle::new()
+                .width(BODY_WIDTH)
+                .height(BODY_HEIGHT)
+                .radius(material_shape::EXTRA_SMALL)
+                .fill(Color::TRANSPARENT)
+                .border(1.5, theme.text),
+        ),
+        Box::new(
+            Rectangle::new()
+                .width(3.0)
+                .height(6.0)
+                .radius(1.0)
+                .fill(theme.text)
+                .translate(BODY_WIDTH, 4.0),
+        ),
+    ];
+
+    if level_width > 0.0 {
+        layers.push(Box::new(
+            Rectangle::new()
+                .width(level_width)
+                .height(INNER_HEIGHT)
+                .radius(material_shape::EXTRA_SMALL)
+                .fill(theme.accent)
+                .translate(2.5, 4.0),
+        ));
+    }
+
+    if charging {
+        layers.push(Box::new(
+            Rectangle::new()
+                .width(14.0)
+                .height(12.0)
+                .fill(Color::TRANSPARENT)
+                .align_child(Center, Center)
+                .child(material_icon(material::icon::BOLT, 9.0, theme.text))
+                .translate(3.0, 1.0),
+        ));
+    }
+
+    Rectangle::new()
+        .width(32.0)
+        .height(32.0)
+        .fill(Color::TRANSPARENT)
+        .align_child(Center, Center)
+        .child(Stack::new(layers).width(24.0).height(20.0))
+}
+
+fn rail_clock(theme: ThemeColors) -> Rectangle {
+    let clock = RailClock::snapshot();
+    Rectangle::new()
+        .width(48.0)
+        .height(BOTTOM_CLOCK_HEIGHT)
+        .fill(Color::TRANSPARENT)
+        .align_child(Center, Center)
+        .child(
+            Column::new(vec![
+                Box::new(Text::new(clock.day_month).size(10.0).color(theme.text)),
+                Box::new(Rectangle::new().width(24.0).height(1.0).fill(theme.divider)),
+                Box::new(Text::new(clock.time).size(12.0).color(theme.text)),
+            ])
+            .width(Parent)
+            .height(Parent)
+            .gap(material_space::XS)
+            .align(Center)
+            .justify(Center),
+        )
 }
 
 // --------------------------------------------------
@@ -860,7 +951,7 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
         ThemeMode::Light => material::icon::LIGHT_MODE,
     };
 
-    icon_button(icon, theme.active_surface).on_click(|_| {
+    icon_button(icon, theme).on_click(|_| {
         Theme::toggle();
     })
 }
@@ -870,7 +961,7 @@ fn theme_button(theme: ThemeColors) -> Rectangle {
 // --------------------------------------------------
 
 fn session_button(theme: ThemeColors) -> Rectangle {
-    icon_button(material::icon::POWER_SETTINGS, theme.active_surface).on_click(|_| {
+    icon_button(material::icon::ACCOUNT_CIRCLE, theme).on_click(|_| {
         println!("caelestia-rs: session");
     })
 }

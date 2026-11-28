@@ -27,12 +27,11 @@ pub mod icon {
     pub const MEMORY: &str = "\u{e322}";
     pub const NETWORK: &str = "\u{e640}";
     pub const STORAGE: &str = "\u{e1db}";
-    pub const BATTERY_CHARGING: &str = "\u{e1a3}";
-    pub const BATTERY_LOW: &str = "\u{e19c}";
     pub const BATTERY_FULL: &str = "\u{e1a4}";
+    pub const BOLT: &str = "\u{e0e0}";
     pub const DARK_MODE: &str = "\u{e518}";
     pub const LIGHT_MODE: &str = "\u{e51c}";
-    pub const POWER_SETTINGS: &str = "\u{f8c7}";
+    pub const ACCOUNT_CIRCLE: &str = "\u{e853}";
     pub const STAR: &str = "\u{e838}";
 }
 
