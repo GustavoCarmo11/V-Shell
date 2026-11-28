@@ -40,7 +40,7 @@ const RAIL_WIDTH: f32 = 60.0;
 const UI_FONT: &str = "Rubik";
 const WORKSPACE_INDICATOR_SIZE: f32 = 44.0;
 // Spacing between adjacent workspace pills, in logical pixels.
-const WORKSPACE_GAP: f32 = 2.0;
+const WORKSPACE_GAP: f32 = 8.50;
 // Extra vertical room belongs to the outer background only, not between icons.
 const WORKSPACE_GROUP_VERTICAL_PADDING: f32 = 16.0;
 const BOTTOM_ACTIONS_HEIGHT: f32 = 224.0;
@@ -520,18 +520,17 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
         .find(|workspace| workspace.active())
         .map(|workspace| workspace.id().to_string());
 
-    // The group target follows the number of regular workspaces. It is kept
-    // unchanged while the special workspace is visible.
-    let regular_height = if workspace_count == 0 {
+    // The group target follows the real pill heights, reserving the active
+    // pill's extra height while keeping adjacent shapes tightly packed.
+    let regular_target_height = if workspace_count == 0 {
         WORKSPACE_INDICATOR_SIZE
     } else {
-        workspace_count as f32 * WORKSPACE_INDICATOR_SIZE
+        workspace_count as f32 * 29.0
             + workspace_count.saturating_sub(1) as f32 * WORKSPACE_GAP
+            + 7.0
     };
 
-    // Keep a little more breathing room than the 44px workspace hit area,
-    // so the tallest active capsule never touches the outer background.
-    let workspace_group_target_height = regular_height + WORKSPACE_GROUP_VERTICAL_PADDING;
+    let workspace_group_target_height = regular_target_height + WORKSPACE_GROUP_VERTICAL_PADDING;
 
     WorkspaceMotion::set_target(
         output,
@@ -547,39 +546,30 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     let special_progress = workspace_motion.special_progress;
     let regular_opacity = 1.0 - special_progress;
 
+    let workspace_progresses: Vec<f32> = workspace_list
+        .iter()
+        .map(|workspace| {
+            let workspace_id = workspace.id().to_string();
+            WorkspaceMotion::workspace_progress(output, &workspace_id)
+        })
+        .collect();
+
+    let regular_height = if workspace_count == 0 {
+        WORKSPACE_INDICATOR_SIZE
+    } else {
+        workspace_progresses
+            .iter()
+            .map(|progress| 29.0 + 7.0 * progress.clamp(-0.10, 1.10))
+            .sum::<f32>()
+            + workspace_count.saturating_sub(1) as f32 * WORKSPACE_GAP
+    };
+
     let mut workspace_buttons: Vec<Box<dyn Widget>> = Vec::new();
-    // Stack anchors this regular-workspace layer at the top of the outer
-    // group, so apply half of the extra background padding as a base inset.
-    let mut workspace_content_offset_y = WORKSPACE_GROUP_VERTICAL_PADDING * 0.5;
+    // Center the content's current animated height inside its size-targeted
+    // surface, which includes the normal outer padding.
+    let workspace_content_offset_y = ((workspace_group_height - regular_height) * 0.5).max(0.0);
 
     if special_progress < 0.999 {
-        // Sample each animation once so the edge alignment follows the same
-        // progress values that shape the indicators below.
-        let workspace_progresses: Vec<f32> = workspace_list
-            .iter()
-            .map(|workspace| {
-                let workspace_id = workspace.id().to_string();
-                WorkspaceMotion::workspace_progress(output, &workspace_id)
-            })
-            .collect();
-
-        // Equalize the visible top and bottom margins. The base inset above
-        // centers the fixed-height column inside the padded background; this
-        // small correction compensates only for unequal first/last indicator
-        // heights. It never changes slots, inter-workspace gaps, or animation
-        // tracks, so the icons do not jump as their shapes morph.
-        if workspace_progresses.len() > 1 {
-            let first_morph = workspace_progresses[0].clamp(-0.10, 1.10);
-            let last_morph =
-                workspace_progresses[workspace_progresses.len() - 1].clamp(-0.10, 1.10);
-            let first_height = 30.0 + 6.0 * first_morph;
-            let last_height = 30.0 + 6.0 * last_morph;
-            let first_inset = (WORKSPACE_INDICATOR_SIZE - first_height) * 0.5;
-            let last_inset = (WORKSPACE_INDICATOR_SIZE - last_height) * 0.5;
-
-            workspace_content_offset_y += (last_inset - first_inset) * 0.5;
-        }
-
         for (workspace, active_progress) in
             workspace_list.iter().zip(workspace_progresses.into_iter())
         {
@@ -789,7 +779,7 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: 
     let indicator_height = 29.0 + 7.0 * morph;
     let radius = indicator_height * 0.5;
     let x = (WORKSPACE_INDICATOR_SIZE - width) * 0.5;
-    let y = (WORKSPACE_INDICATOR_SIZE - indicator_height) * 0.5;
+    let y = 0.0;
 
     let mut layers: Vec<Box<dyn Widget>> = Vec::new();
 
@@ -817,7 +807,7 @@ fn workspace_button(workspace: &Workspace, theme: ThemeColors, active_progress: 
 
     Rectangle::new()
         .width(WORKSPACE_INDICATOR_SIZE)
-        .height(WORKSPACE_INDICATOR_SIZE)
+        .height(indicator_height)
         .fill(Color::TRANSPARENT)
         .cursor(Pointer)
         .child(Stack::new(layers).width(Parent).height(Parent))

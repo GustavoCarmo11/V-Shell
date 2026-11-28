@@ -14,7 +14,7 @@ use crate::rail_battery::RailBattery;
 use crate::theme::ThemeColors;
 
 const POPOUT_WIDTH: f32 = 300.0;
-const CONTENT_FADE_DURATION: Duration = Duration::from_millis(150);
+const CONTENT_FADE_DURATION: Duration = Duration::from_millis(250);
 const SIZE_TRANSITION_DURATION: Duration = Duration::from_millis(240);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
