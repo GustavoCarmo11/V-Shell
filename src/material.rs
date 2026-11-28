@@ -47,6 +47,19 @@ pub mod icon {
     pub const BATTERY_VERTICAL_FULL: &str = "\u{f24f}";
     pub const BOLT: &str = "\u{e0e0}";
     pub const STAR: &str = "\u{e838}";
+    pub const LOCK: &str = "\u{e897}";
+    pub const LINK: &str = "\u{e157}";
+    pub const SEARCH: &str = "\u{e8b6}";
+    pub const CHECK: &str = "\u{e5ca}";
+    pub const CLOSE: &str = "\u{e5cd}";
+    pub const RADIO_CHECKED: &str = "\u{e837}";
+    pub const RADIO_UNCHECKED: &str = "\u{e836}";
+    pub const SIGNAL_WIFI: &str = "\u{e1e1}";
+    pub const ADD: &str = "\u{e145}";
+    pub const SETTINGS: &str = "\u{e8b8}";
+    pub const ECO: &str = "\u{e8cd}";
+    pub const BALANCE: &str = "\u{eaf6}";
+    pub const ROCKET: &str = "\u{eb9b}";
 }
 
 pub mod shape {
