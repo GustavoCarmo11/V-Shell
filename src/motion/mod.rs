@@ -2,6 +2,8 @@ mod deformation;
 mod presets;
 mod spring;
 
+pub use spring::{Spring, SpringConfig};
+
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -10,7 +12,6 @@ use amane::{Rectangle, Service, Transform, request_frame};
 
 use self::deformation::BlobDeformer;
 use self::presets::{LAUNCHER_CLOSE, LAUNCHER_OPEN, PANEL_CLOSE, PANEL_OPEN, STATUS_CLOSE};
-use self::spring::Spring;
 
 /// Delay that bridges gaps between the rail trigger and a panel's hit region.
 /// The layer-shell surface may emit pointer-leave while the cursor crosses a

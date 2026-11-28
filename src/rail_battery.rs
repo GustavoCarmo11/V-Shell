@@ -11,6 +11,7 @@ pub struct RailBattery {
     pub present: bool,
     pub percent: u8,
     pub charging: bool,
+    pub plugged_in: bool,
 }
 
 impl RailBattery {
@@ -65,11 +66,39 @@ fn read_battery(path: Option<&Path>) -> RailBattery {
         return RailBattery::default();
     };
 
+    let status = read(path, "status");
+    let plugged_in =
+        status == "Charging" || external_power_connected().unwrap_or(status == "Charging");
+
     RailBattery {
         present: true,
         percent: read(path, "capacity").parse::<u8>().unwrap_or(0).min(100),
-        charging: read(path, "status") == "Charging",
+        charging: status == "Charging",
+        plugged_in,
     }
+}
+
+fn external_power_connected() -> Option<bool> {
+    let entries = fs::read_dir(POWER_SUPPLIES).ok()?;
+    let mut found_supply = false;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let kind = read(&path, "type");
+        if kind != "Mains" && !kind.starts_with("USB") {
+            continue;
+        }
+
+        let Ok(online) = fs::read_to_string(path.join("online")) else {
+            continue;
+        };
+        found_supply = true;
+        if online.trim() == "1" {
+            return Some(true);
+        }
+    }
+
+    found_supply.then_some(false)
 }
 
 fn read(path: &Path, file: &str) -> String {

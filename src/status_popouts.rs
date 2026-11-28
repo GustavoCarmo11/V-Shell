@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -5,18 +6,17 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use amane::{
-    Audio, Bluetooth, Center, Color, Column, Network, Parent, Rectangle, Service, Stack, Text,
-    TextInput, Widget, request_frame,
+    Animation, Audio, Bluetooth, Center, Color, Column, Easing, Network, Parent, Rectangle,
+    Service, Stack, Text, TextInput, Widget, request_frame,
 };
 
 use crate::material::{self, shape as material_shape, space as material_space};
-use crate::motion::{Motion, PanelId, TRIGGER_HOVER_LEAVE_GRACE};
+use crate::motion::{Motion, PanelId, Spring, SpringConfig, TRIGGER_HOVER_LEAVE_GRACE};
 use crate::rail_battery::RailBattery;
 use crate::theme::ThemeColors;
 
 const POPOUT_WIDTH: f32 = 300.0;
-const CONTENT_FADE_DURATION: Duration = Duration::from_millis(250);
-const SIZE_TRANSITION_DURATION: Duration = Duration::from_millis(240);
+const CONTENT_FADE_DURATION: Duration = Duration::from_millis(300);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StatusSection {
@@ -26,15 +26,12 @@ pub enum StatusSection {
     Audio,
 }
 
-#[derive(Clone, Copy)]
 struct SelectionState {
     current: StatusSection,
     previous: StatusSection,
     changed_at: Instant,
-    current_height: f32,
-    from_height: f32,
     target_height: f32,
-    size_changed_at: Instant,
+    size_motion: Spring,
 }
 
 impl Default for SelectionState {
@@ -44,10 +41,8 @@ impl Default for SelectionState {
             current: StatusSection::Battery,
             previous: StatusSection::Battery,
             changed_at: now,
-            current_height: 0.0,
-            from_height: 0.0,
             target_height: 0.0,
-            size_changed_at: now,
+            size_motion: Spring::new(0.0, SpringConfig::panel_resize()),
         }
     }
 }
@@ -58,6 +53,13 @@ static STATUS_TRIGGER_HOVERED: AtomicBool = AtomicBool::new(false);
 static AUDIO_DEVICES: OnceLock<Mutex<AudioDevices>> = OnceLock::new();
 static AUDIO_DEVICES_WORKER: AtomicBool = AtomicBool::new(false);
 static POWER_PROFILE: OnceLock<Mutex<String>> = OnceLock::new();
+static CONTROL_MOTIONS: OnceLock<Mutex<HashMap<&'static str, ControlMotion>>> = OnceLock::new();
+
+struct ControlMotion {
+    animation: Animation<f32>,
+    target: f32,
+    pending_since: Option<Instant>,
+}
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct AudioDevice {
@@ -171,6 +173,69 @@ pub fn active_section() -> StatusSection {
         .current
 }
 
+fn control_motion_value(key: &'static str, actual: f32) -> f32 {
+    let mut motions = CONTROL_MOTIONS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let motion = motions.entry(key).or_insert_with(|| ControlMotion {
+        animation: Animation::new(actual)
+            .duration(Duration::from_millis(180))
+            .easing(Easing::Out),
+        target: actual,
+        pending_since: None,
+    });
+
+    if motion.pending_since.is_some() {
+        if (actual - motion.target).abs() < 0.015 {
+            motion.pending_since = None;
+        } else if motion
+            .pending_since
+            .is_some_and(|since| since.elapsed() >= Duration::from_secs(2))
+        {
+            motion.pending_since = None;
+            motion.target = actual;
+            motion.animation.to(actual);
+        }
+    } else if (actual - motion.target).abs() > 0.005 {
+        motion.target = actual;
+        motion.animation.to(actual);
+    }
+
+    motion.animation.value()
+}
+
+fn request_control_value(key: &'static str, actual: f32, target: f32) {
+    let mut motions = CONTROL_MOTIONS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let motion = motions.entry(key).or_insert_with(|| ControlMotion {
+        animation: Animation::new(actual)
+            .duration(Duration::from_millis(180))
+            .easing(Easing::Out),
+        target: actual,
+        pending_since: None,
+    });
+    motion.target = target;
+    motion.pending_since = Some(Instant::now());
+    motion.animation.to(target);
+    request_frame();
+}
+
+fn flip_control_value(key: &'static str, actual: f32) -> bool {
+    let current_target = CONTROL_MOTIONS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .get(key)
+        .map(|motion| motion.target)
+        .unwrap_or(actual);
+    let enabled = current_target < 0.5;
+    request_control_value(key, actual, if enabled { 1.0 } else { 0.0 });
+    enabled
+}
+
 pub fn status_trigger(section: StatusSection, widget: Rectangle) -> Rectangle {
     widget.on_hover(move |inside| {
         if inside {
@@ -182,8 +247,6 @@ pub fn status_trigger(section: StatusSection, widget: Rectangle) -> Rectangle {
                 state.previous = state.current;
                 state.current = section;
                 state.changed_at = Instant::now();
-                state.from_height = state.current_height;
-                state.size_changed_at = state.changed_at;
                 request_frame();
             }
             drop(state);
@@ -229,29 +292,31 @@ pub fn status_popout(
 
         let desired_height = section_height(current, &network, &bluetooth, &audio_devices);
         if (desired_height - state.target_height).abs() > 1.0 {
-            state.from_height = state.current_height;
+            state
+                .size_motion
+                .set_target_with_config(desired_height, SpringConfig::panel_resize());
             state.target_height = desired_height;
-            state.size_changed_at = Instant::now();
         }
-
-        let size_progress = (state.size_changed_at.elapsed().as_secs_f32()
-            / SIZE_TRANSITION_DURATION.as_secs_f32())
-        .clamp(0.0, 1.0);
-        let size_eased = smoothstep(size_progress);
-        state.current_height =
-            state.from_height + (state.target_height - state.from_height) * size_eased;
+        let size_sample = state.size_motion.sample();
 
         let fade = smoothstep(
             (state.changed_at.elapsed().as_secs_f32() / CONTENT_FADE_DURATION.as_secs_f32())
                 .clamp(0.0, 1.0),
         );
-        if fade < 1.0 || size_progress < 1.0 {
+        if fade < 1.0 || !size_sample.settled {
             request_frame();
-        } else {
+        }
+        if fade >= 1.0 {
             state.previous = state.current;
         }
 
-        (current, previous, fade, state.current_height)
+        let max_height = (height - bottom_frame - 16.0).max(1.0);
+        (
+            current,
+            previous,
+            fade,
+            size_sample.position.clamp(1.0, max_height),
+        )
     };
 
     let motion = Motion::sample(PanelId::QuickSettings, (182.0, 0.0));
@@ -364,8 +429,28 @@ fn section_height(
     match section {
         StatusSection::Battery => 180.0,
         StatusSection::Wifi => {
-            let networks = network.access_points().len().min(8) as f32;
-            (280.0 + networks * 36.0).clamp(320.0, 600.0)
+            let networks = network.access_points().len().min(8);
+            let empty_message = usize::from(networks == 0 && network.wifi_enabled());
+            let password_prompt = usize::from(WIFI_SELECTION.get().is_some_and(|selection| {
+                !selection
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner())
+                    .is_empty()
+            }));
+            let children = 4 + networks + empty_message + password_prompt;
+            let rows_height = networks as f32 * 36.0;
+            let empty_height = empty_message as f32 * 16.0;
+            let password_height = password_prompt as f32 * 44.0;
+            (32.0
+                + 22.0
+                + 42.0
+                + 14.0
+                + rows_height
+                + empty_height
+                + password_height
+                + 42.0
+                + children.saturating_sub(1) as f32 * material_space::SM)
+                .max(180.0)
         }
         StatusSection::Bluetooth => {
             let devices = bluetooth.devices().len().min(7) as f32;
@@ -417,7 +502,10 @@ fn battery_content(theme: ThemeColors, battery: &RailBattery) -> Rectangle {
         18.0,
     ))];
     children.push(Box::new(label(battery_detail, theme.text, 18.0)));
-    children.push(Box::new(profile_picker(theme)));
+    children.push(Box::new(profile_picker(
+        theme,
+        !battery.plugged_in && !battery.charging,
+    )));
     card_content(children, theme)
 }
 
@@ -438,7 +526,7 @@ fn selected_power_profile() -> String {
         .clone()
 }
 
-fn profile_picker(theme: ThemeColors) -> Rectangle {
+fn profile_picker(theme: ThemeColors, selectable: bool) -> Rectangle {
     let selected = selected_power_profile();
     let profiles = [
         ("power-saver", material::icon::ECO, "Economia"),
@@ -449,26 +537,66 @@ fn profile_picker(theme: ThemeColors) -> Rectangle {
         .into_iter()
         .map(|(profile, icon, _label)| {
             let active = selected == profile;
-            let profile_id = profile.to_owned();
-            let foreground = if active {
-                theme.active_text
-            } else {
-                theme.muted
+            let motion_key = match profile {
+                "power-saver" => "profile-power-saver",
+                "balanced" => "profile-balanced",
+                _ => "profile-performance",
             };
+            let progress =
+                control_motion_value(motion_key, if active { 1.0 } else { 0.0 }).clamp(0.0, 1.0);
+            let profile_id = profile.to_owned();
+            let profile_icon = Stack::new(vec![
+                Box::new(
+                    Rectangle::new()
+                        .width(Parent)
+                        .height(Parent)
+                        .fill(Color::TRANSPARENT)
+                        .opacity(1.0 - progress)
+                        .align_child(Center, Center)
+                        .child(crate::material::icon(icon, 27.0, theme.muted)),
+                ),
+                Box::new(
+                    Rectangle::new()
+                        .width(Parent)
+                        .height(Parent)
+                        .fill(Color::TRANSPARENT)
+                        .opacity(progress)
+                        .align_child(Center, Center)
+                        .child(crate::material::icon(icon, 27.0, theme.active_text)),
+                ),
+            ])
+            .width(Parent)
+            .height(Parent);
             Box::new(
                 Rectangle::new()
                     .width(Parent)
                     .height(56.0)
                     .radius(material_shape::FULL)
-                    .fill(if active {
-                        theme.active_surface
+                    .fill(Color::TRANSPARENT)
+                    .cursor(if selectable {
+                        amane::Cursor::Pointer
                     } else {
-                        Color::TRANSPARENT
+                        amane::Cursor::NotAllowed
                     })
-                    .cursor(amane::Pointer)
-                    .align_child(Center, Center)
-                    .child(crate::material::icon(icon, 27.0, foreground))
+                    .child(
+                        Stack::new(vec![
+                            Box::new(
+                                Rectangle::new()
+                                    .width(Parent)
+                                    .height(Parent)
+                                    .radius(material_shape::FULL)
+                                    .fill(theme.active_surface)
+                                    .opacity(progress),
+                            ),
+                            Box::new(profile_icon),
+                        ])
+                        .width(Parent)
+                        .height(Parent),
+                    )
                     .on_click(move |_| {
+                        if !selectable {
+                            return;
+                        }
                         let profile_id = profile_id.clone();
                         thread::spawn(move || {
                             let succeeded = Command::new("powerprofilesctl")
@@ -495,6 +623,7 @@ fn profile_picker(theme: ThemeColors) -> Rectangle {
         .radius(material_shape::FULL)
         .fill(theme.workspace_group_surface)
         .padding(material_space::XS)
+        .opacity(if selectable { 1.0 } else { 0.62 })
         .child(
             amane::Row::new(choices)
                 .width(Parent)
@@ -508,10 +637,11 @@ fn wifi_content(theme: ThemeColors, network: &Network, active: bool) -> Rectangl
     let mut children: Vec<Box<dyn Widget>> = vec![Box::new(label("Wireless", theme.text, 19.0))];
     let wifi_enabled = network.wifi_enabled();
     children.push(Box::new(toggle_row(
+        "wifi-enabled",
         "Ativado",
         wifi_enabled,
         theme,
-        move || Network::set_wifi(!wifi_enabled),
+        Network::set_wifi,
     )));
     children.push(Box::new(label(
         format!("{} rede(s) disponível(is)", network.access_points().len()),
@@ -599,20 +729,25 @@ fn wifi_content(theme: ThemeColors, network: &Network, active: bool) -> Rectangl
 fn bluetooth_content(theme: ThemeColors, bluetooth: &Bluetooth) -> Rectangle {
     let mut children: Vec<Box<dyn Widget>> = vec![Box::new(label("Bluetooth", theme.text, 19.0))];
     let powered = bluetooth.powered();
-    children.push(Box::new(toggle_row("Ativado", powered, theme, move || {
-        Bluetooth::set_powered(!powered)
-    })));
+    children.push(Box::new(toggle_row(
+        "bluetooth-enabled",
+        "Ativado",
+        powered,
+        theme,
+        Bluetooth::set_powered,
+    )));
     if powered {
         let scanning = bluetooth.scanning();
         children.push(Box::new(toggle_row(
+            "bluetooth-discovery",
             "Buscando dispositivos",
             scanning,
             theme,
-            move || {
-                if scanning {
-                    Bluetooth::stop_scan();
-                } else {
+            |enabled| {
+                if enabled {
                     Bluetooth::start_scan();
+                } else {
+                    Bluetooth::stop_scan();
                 }
             },
         )));
@@ -793,37 +928,44 @@ fn audio_device_row(
 }
 
 fn volume_slider(level: u8, input: bool, theme: ThemeColors) -> Rectangle {
-    let on_drag_input = input;
-    let on_scroll_input = input;
-    let fill_width = 268.0 * level as f32 / 100.0;
+    const TRAVEL: f32 = 250.0;
+    let control_key = if input {
+        "microphone-volume"
+    } else {
+        "output-volume"
+    };
+    let progress = control_motion_value(control_key, level as f32 / 100.0).clamp(0.0, 1.0);
+    let fill_width = 9.0 + TRAVEL * progress;
+    let thumb_x = TRAVEL * progress;
     Rectangle::new()
         .width(Parent)
-        .height(42.0)
+        .height(36.0)
         .fill(Color::TRANSPARENT)
         .child(
             Stack::new(vec![
                 Box::new(
                     Rectangle::new()
                         .width(Parent)
-                        .height(30.0)
+                        .height(8.0)
                         .radius(material_shape::FULL)
                         .fill(theme.workspace_group_surface)
-                        .align_child(amane::Start, Center)
-                        .child(
-                            Rectangle::new()
-                                .width(fill_width)
-                                .height(30.0)
-                                .radius(material_shape::FULL)
-                                .fill(theme.accent),
-                        ),
+                        .translate(0.0, 14.0),
                 ),
                 Box::new(
                     Rectangle::new()
-                        .width(6.0)
-                        .height(42.0)
+                        .width(fill_width)
+                        .height(8.0)
                         .radius(material_shape::FULL)
-                        .fill(theme.active_text)
-                        .translate(fill_width - 3.0, 0.0),
+                        .fill(theme.accent)
+                        .translate(0.0, 14.0),
+                ),
+                Box::new(
+                    Rectangle::new()
+                        .width(18.0)
+                        .height(18.0)
+                        .radius(material_shape::FULL)
+                        .fill(theme.accent)
+                        .translate(thumb_x, 9.0),
                 ),
             ])
             .width(Parent)
@@ -831,13 +973,17 @@ fn volume_slider(level: u8, input: bool, theme: ThemeColors) -> Rectangle {
         )
         .cursor(amane::Pointer)
         .on_drag(move |point| {
-            let value = ((point.x / 268.0) * 100.0).round().clamp(0.0, 100.0) as u8;
-            set_audio_level(on_drag_input, value);
+            let value = (((point.x - 9.0) / TRAVEL) * 100.0)
+                .round()
+                .clamp(0.0, 100.0);
+            request_control_value(control_key, level as f32 / 100.0, value / 100.0);
+            set_audio_level(input, value as u8);
         })
         .on_scroll(move |scroll| {
             let step = if scroll.y > 0.0 { 5 } else { -5 };
-            let value = (level as i16 + step).clamp(0, 100) as u8;
-            set_audio_level(on_scroll_input, value);
+            let value = ((progress * 100.0).round() as i16 + step).clamp(0, 100) as u8;
+            request_control_value(control_key, level as f32 / 100.0, value as f32 / 100.0);
+            set_audio_level(input, value);
         })
 }
 
@@ -962,43 +1108,92 @@ fn device_row(
 }
 
 fn toggle_row(
+    key: &'static str,
     title: &str,
     enabled: bool,
     theme: ThemeColors,
-    on_toggle: impl Fn() + 'static,
+    on_toggle: impl Fn(bool) + 'static,
 ) -> Rectangle {
+    let progress = control_motion_value(key, if enabled { 1.0 } else { 0.0 }).clamp(0.0, 1.0);
+    let knob_x = 4.0 + progress * 20.0;
     let track = Rectangle::new()
         .width(50.0)
         .height(30.0)
-        .radius(material_shape::FULL)
-        .fill(if enabled {
-            theme.active_surface
-        } else {
-            theme.workspace_group_surface
-        })
-        .align_child(amane::Start, Center)
-        .padding(material_space::XS)
+        .fill(Color::TRANSPARENT)
         .child(
-            Rectangle::new()
-                .width(22.0)
-                .height(22.0)
-                .radius(material_shape::FULL)
-                .fill(if enabled { theme.accent } else { theme.muted })
-                .align_child(Center, Center)
-                .translate(if enabled { 20.0 } else { 0.0 }, 0.0)
-                .child(crate::material::icon(
-                    if enabled {
-                        material::icon::CHECK
-                    } else {
-                        material::icon::CLOSE
-                    },
-                    14.0,
-                    if enabled {
-                        theme.active_text
-                    } else {
-                        theme.text
-                    },
-                )),
+            Stack::new(vec![
+                Box::new(
+                    Rectangle::new()
+                        .width(Parent)
+                        .height(Parent)
+                        .radius(material_shape::FULL)
+                        .fill(theme.workspace_group_surface),
+                ),
+                Box::new(
+                    Rectangle::new()
+                        .width(Parent)
+                        .height(Parent)
+                        .radius(material_shape::FULL)
+                        .fill(theme.active_surface)
+                        .opacity(progress),
+                ),
+                Box::new(
+                    Rectangle::new()
+                        .width(22.0)
+                        .height(22.0)
+                        .fill(Color::TRANSPARENT)
+                        .translate(knob_x, 4.0)
+                        .child(
+                            Stack::new(vec![
+                                Box::new(
+                                    Rectangle::new()
+                                        .width(Parent)
+                                        .height(Parent)
+                                        .radius(material_shape::FULL)
+                                        .fill(theme.muted),
+                                ),
+                                Box::new(
+                                    Rectangle::new()
+                                        .width(Parent)
+                                        .height(Parent)
+                                        .radius(material_shape::FULL)
+                                        .fill(theme.accent)
+                                        .opacity(progress),
+                                ),
+                                Box::new(
+                                    Rectangle::new()
+                                        .width(Parent)
+                                        .height(Parent)
+                                        .fill(Color::TRANSPARENT)
+                                        .opacity(1.0 - progress)
+                                        .align_child(Center, Center)
+                                        .child(crate::material::icon(
+                                            material::icon::CLOSE,
+                                            14.0,
+                                            theme.text,
+                                        )),
+                                ),
+                                Box::new(
+                                    Rectangle::new()
+                                        .width(Parent)
+                                        .height(Parent)
+                                        .fill(Color::TRANSPARENT)
+                                        .opacity(progress)
+                                        .align_child(Center, Center)
+                                        .child(crate::material::icon(
+                                            material::icon::CHECK,
+                                            14.0,
+                                            theme.active_text,
+                                        )),
+                                ),
+                            ])
+                            .width(Parent)
+                            .height(Parent),
+                        ),
+                ),
+            ])
+            .width(Parent)
+            .height(Parent),
         );
     Rectangle::new()
         .width(Parent)
@@ -1016,7 +1211,10 @@ fn toggle_row(
             .align(Center)
             .justify(amane::SpaceBetween),
         )
-        .on_click(move |_| on_toggle())
+        .on_click(move |_| {
+            let next = flip_control_value(key, if enabled { 1.0 } else { 0.0 });
+            on_toggle(next);
+        })
 }
 
 fn primary_action(

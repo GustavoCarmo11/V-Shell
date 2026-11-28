@@ -718,13 +718,13 @@ fn rail(theme: ThemeColors, height: f32, output: &str) -> Rectangle {
     if battery.present {
         bottom_action_widgets.push(Box::new(status_trigger(
             StatusSection::Battery,
-            battery_indicator(battery.percent, battery.charging, theme),
+            battery_indicator(battery.percent, battery.charging, battery.plugged_in, theme),
         )));
     }
     let bottom_actions = Column::new(bottom_action_widgets)
         .width(Parent)
         .height(Parent)
-        .gap(material_space::XS)
+        .gap(1.0)
         .align(Center)
         .justify(Center);
 
@@ -941,17 +941,30 @@ fn icon_button(icon: &'static str, theme: ThemeColors) -> Rectangle {
         .child(material_icon(icon, 20.0, theme.accent))
 }
 
-fn battery_indicator(percent: u8, charging: bool, theme: ThemeColors) -> Rectangle {
-    let icon = if percent <= 10 {
-        material::icon::BATTERY_VERTICAL_0
-    } else if percent <= 30 {
-        material::icon::BATTERY_VERTICAL_20
-    } else if percent <= 60 {
-        material::icon::BATTERY_VERTICAL_50
-    } else if percent <= 90 {
-        material::icon::BATTERY_VERTICAL_80
-    } else {
+fn battery_indicator(
+    percent: u8,
+    charging: bool,
+    battery_plugged_in: bool,
+    theme: ThemeColors,
+) -> Rectangle {
+    let icon = if !charging && percent >= 95 && !battery_plugged_in {
         material::icon::BATTERY_VERTICAL_FULL
+    } else if !charging && percent >= 95 && battery_plugged_in {
+        material::icon::BATTERY_FRAME_BOLT
+    } else if !charging && percent <= 10 {
+        material::icon::BATTERY_FRAME_ALERT
+    } else if percent <= 10 {
+        material::icon::BATTERY_FRAME_1
+    } else if percent <= 25 {
+        material::icon::BATTERY_FRAME_2
+    } else if percent <= 40 {
+        material::icon::BATTERY_FRAME_3
+    } else if percent <= 55 {
+        material::icon::BATTERY_FRAME_4
+    } else if percent <= 70 {
+        material::icon::BATTERY_FRAME_5
+    } else {
+        material::icon::BATTERY_FRAME_6
     };
     let mut icons: Vec<Box<dyn Widget>> = vec![Box::new(material_icon(icon, 23.0, theme.accent))];
     if charging {

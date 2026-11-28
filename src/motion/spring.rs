@@ -38,6 +38,18 @@ impl SpringConfig {
         }
     }
 
+    /// Elastic resizing with a short, controlled overshoot in logical pixels.
+    pub const fn panel_resize() -> Self {
+        Self {
+            stiffness: 190.0,
+            damping: 19.0,
+            mass: 1.0,
+            rest_delta: 0.08,
+            rest_speed: 0.8,
+            max_duration: Duration::from_millis(850),
+        }
+    }
+
     /// Backwards-compatible default profile.
     pub const fn panel() -> Self {
         Self::panel_open()
