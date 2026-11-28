@@ -197,8 +197,6 @@ fn profile_card(user: &str, theme: ThemeColors) -> Rectangle {
 }
 
 fn clock_card(clock: &DateClock, theme: ThemeColors) -> Rectangle {
-    let (hour, minute) = clock.time.split_once(':').unwrap_or((&clock.time, "--"));
-
     Rectangle::new()
         .width(LEFT_COLUMN_WIDTH)
         .height(194.0)
@@ -207,13 +205,21 @@ fn clock_card(clock: &DateClock, theme: ThemeColors) -> Rectangle {
         .padding(material_space::LG)
         .child(
             Column::new(vec![
-                Box::new(Text::new(hour.to_owned()).size(43.0).color(theme.text)),
-                Box::new(Text::new("•••").size(13.0).color(theme.accent)),
-                Box::new(Text::new(minute.to_owned()).size(43.0).color(theme.text)),
                 Box::new(
-                    Text::new(format!("{} · {}", capitalize(&clock.weekday), clock.day))
-                        .size(13.0)
-                        .color(theme.muted),
+                    Text::new("AGORA")
+                        .size(material_type::LABEL_SMALL)
+                        .color(theme.accent),
+                ),
+                Box::new(Text::new(clock.time.clone()).size(48.0).color(theme.text)),
+                Box::new(
+                    Text::new(format!(
+                        "{} · {} de {}",
+                        capitalize(&clock.weekday),
+                        clock.day,
+                        capitalize(&clock.month_name)
+                    ))
+                    .size(material_type::BODY_MEDIUM)
+                    .color(theme.muted),
                 ),
             ])
             .width(Parent)

@@ -87,12 +87,9 @@ struct TabTransition {
 static MEDIA_TAB_VISITED: AtomicBool = AtomicBool::new(false);
 static PERFORMANCE_TAB_VISITED: AtomicBool = AtomicBool::new(false);
 
-/// The panel and content dimensions for the currently selected Dashboard page.
-/// Dimensions are derived from each page's layout, not a single global size.
+/// Panel and page dimensions for the currently selected Dashboard section.
 #[derive(Clone, Copy, Debug)]
 pub struct DashboardDimensions {
-    pub content_width: f32,
-    pub content_height: f32,
     pub panel_width: f32,
     pub panel_height: f32,
 }
@@ -113,8 +110,6 @@ pub fn dashboard_dimensions() -> DashboardDimensions {
     let panel_height = content_height.max(NAVIGATION_HEIGHT) + PANEL_PADDING * 2.0;
 
     DashboardDimensions {
-        content_width,
-        content_height,
         panel_width,
         panel_height,
     }
@@ -169,7 +164,9 @@ pub fn dashboard_panel(
     animated_panel_height: f32,
 ) -> Rectangle {
     let selected = selected_tab();
-    let dimensions = dashboard_dimensions();
+    let content_width =
+        animated_panel_width - NAVIGATION_WIDTH - NAVIGATION_GAP - PANEL_PADDING * 2.0;
+    let content_height = animated_panel_height - PANEL_PADDING * 2.0;
     let transition = if visible { tab_transition() } else { None };
     let previous = transition.map(|transition| transition.previous);
     let media_visible =
@@ -190,32 +187,29 @@ pub fn dashboard_panel(
     }
 
     let content = if !visible {
-        Rectangle::new()
-            .width(dimensions.content_width)
-            .height(dimensions.content_height)
+        Rectangle::new().width(content_width).height(content_height)
     } else if let Some(transition) = transition {
         let progress = transition.progress;
         let direction = transition.direction;
-        let transition_distance = dimensions.content_height.max(NAVIGATION_HEIGHT);
+        let transition_distance = content_height;
         let incoming = Rectangle::new()
             .width(Parent)
             .height(Parent)
-            .translate(
-                0.0,
-                direction * (1.0 - progress) * transition_distance,
-            )
+            .clip()
+            .translate(0.0, direction * (1.0 - progress) * transition_distance)
             .align_child(amane::Start, amane::Start)
             .child(selected.view(theme));
         let outgoing = Rectangle::new()
             .width(Parent)
             .height(Parent)
+            .clip()
             .translate(0.0, -direction * progress * transition_distance)
             .align_child(amane::Start, amane::Start)
             .child(transition.previous.view(theme));
 
         Rectangle::new()
-            .width(dimensions.content_width)
-            .height(dimensions.content_height)
+            .width(content_width)
+            .height(content_height)
             .clip()
             .child(
                 Stack::new(vec![Box::new(outgoing), Box::new(incoming)])
@@ -259,8 +253,8 @@ pub fn dashboard_panel(
     .justify(Center);
 
     let content = Rectangle::new()
-        .width(dimensions.content_width)
-        .height(dimensions.content_height)
+        .width(content_width)
+        .height(content_height)
         .align_child(amane::Start, amane::Start)
         .child(content);
 
@@ -275,8 +269,8 @@ pub fn dashboard_panel(
                 .width(Parent)
                 .height(Parent)
                 .gap(NAVIGATION_GAP)
-                // Keep the four-button session dock vertically centered beside each page.
-                .align(Center)
+                // Keep the dock anchored while the section viewport changes size.
+                .align(amane::Start)
                 .justify(amane::Start),
         )
 }

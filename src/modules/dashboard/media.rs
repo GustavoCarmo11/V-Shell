@@ -31,9 +31,11 @@ const COLUMN_GAP: f32 = material_space::LG;
 struct TrackExtras {
     enabled: bool,
     track_key: String,
+    lyrics_key: String,
     artwork: Option<PathBuf>,
     album: String,
     lyrics: String,
+    lyrics_source: String,
 }
 
 impl Service for TrackExtras {
@@ -56,18 +58,21 @@ impl Service for TrackExtras {
                         player.title().to_owned(),
                         player.artist().to_owned(),
                         player.art_url().to_owned(),
+                        player.length(),
                     )
                 })
             };
 
-            let Some((player, title, artist, art_url)) = active else {
+            let Some((player, title, artist, art_url, duration)) = active else {
                 let previous_key = Self::read().track_key.clone();
                 if !previous_key.is_empty() {
                     let mut state = Self::write();
                     state.track_key.clear();
+                    state.lyrics_key.clear();
                     state.artwork = None;
                     state.album.clear();
                     state.lyrics.clear();
+                    state.lyrics_source.clear();
                 }
                 thread::sleep(Duration::from_secs(2));
                 continue;
@@ -78,13 +83,16 @@ impl Service for TrackExtras {
             if key != current_key {
                 // Resolve artwork and metadata before taking the service write lock.
                 let artwork = resolve_artwork(&art_url);
-                let (album, lyrics) = fetch_track_extras(&player);
+                let (album, lyrics, lyrics_source) =
+                    fetch_track_extras(&player, &title, &artist, duration);
 
                 let mut state = Self::write();
                 state.track_key = key;
+                state.lyrics_key = lyrics_key(&title, &artist);
                 state.artwork = artwork;
                 state.album = album;
                 state.lyrics = lyrics;
+                state.lyrics_source = lyrics_source;
             }
 
             thread::sleep(Duration::from_secs(2));
@@ -145,40 +153,52 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
     visualizer::set_enabled(player.playing);
 
     let extras = TrackExtras::read();
-    let lyrics = if extras.lyrics.trim().is_empty() {
-        "Este player não disponibiliza letras pela interface MPRIS (xesam:asText).".to_owned()
-    } else {
-        extras.lyrics.clone()
-    };
-    let album = if extras.album.trim().is_empty() {
+    let extras_match = extras.lyrics_key == lyrics_key(&player.title, &player.artist);
+    let lyrics = extras_match
+        .then(|| extras.lyrics.clone())
+        .unwrap_or_default();
+    let lyrics_source = extras_match
+        .then(|| extras.lyrics_source.clone())
+        .unwrap_or_default();
+    let loading_lyrics = !extras_match;
+    let album = if !extras_match || extras.album.trim().is_empty() {
         "Álbum não informado".to_owned()
     } else {
         extras.album.clone()
     };
-    let artwork_path = extras.artwork.clone();
+    let artwork_path = extras_match.then(|| extras.artwork.clone()).flatten();
     drop(extras);
 
     let (bars, cava_available) = visualizer::snapshot();
     let art = artwork_view(theme, artwork_path, bars);
-    let cover_column = Column::new(vec![
-        Box::new(art),
-        Box::new(
-            Text::new(if !player.playing {
-                "VISUALIZADOR PAUSADO"
-            } else if cava_available {
-                "VISUALIZADOR DE ÁUDIO"
-            } else {
-                "INSTALE CAVA PARA O ESPECTRO"
-            })
-            .size(9.0)
-            .color(theme.muted),
-        ),
-    ])
-    .width(COVER_SIZE)
-    .height(CONTENT_HEIGHT)
-    .gap(material_space::SM)
-    .align(Center)
-    .justify(Center);
+    let cover_column = Rectangle::new()
+        .width(COVER_SIZE)
+        .height(CONTENT_HEIGHT)
+        .radius(material_shape::CARD)
+        .fill(theme.button_surface)
+        .clip()
+        .align_child(Center, Center)
+        .child(
+            Column::new(vec![
+                Box::new(art),
+                Box::new(
+                    Text::new(if !player.playing {
+                        "VISUALIZADOR PAUSADO"
+                    } else if cava_available {
+                        "VISUALIZADOR DE ÁUDIO"
+                    } else {
+                        "INSTALE CAVA PARA O ESPECTRO"
+                    })
+                    .size(9.0)
+                    .color(theme.muted),
+                ),
+            ])
+            .width(Parent)
+            .height(Parent)
+            .gap(material_space::SM)
+            .align(Center)
+            .justify(Center),
+        );
 
     let inner_details_width = DETAILS_WIDTH - 36.0;
     let progress = if player.length.as_secs() > 0 {
@@ -294,40 +314,13 @@ pub(super) fn view(theme: ThemeColors) -> Rectangle {
             .justify(Center),
         );
 
-    let lyrics_panel = Rectangle::new()
-        .width(LYRICS_WIDTH)
-        .height(CONTENT_HEIGHT)
-        .radius(material_shape::CARD)
-        .fill(theme.button_surface)
-        .padding(material_space::LG)
-        .child(
-            Column::new(vec![
-                Box::new(
-                    Row::new(vec![
-                        Box::new(material_icon(material::icon::LYRICS, 17.0, theme.accent)),
-                        Box::new(Text::new("LETRAS").size(12.0).color(theme.text)),
-                    ])
-                    .width(Parent)
-                    .height(22.0)
-                    .gap(material_space::SM)
-                    .align(Center)
-                    .justify(Start),
-                ),
-                Box::new(
-                    ScrollArea::new(
-                        "vshell-dashboard-media-lyrics",
-                        Text::new(lyrics).size(13.0).color(theme.text).wrap(),
-                    )
-                    .width(Parent)
-                    .height(330.0),
-                ),
-            ])
-            .width(Parent)
-            .height(Parent)
-            .gap(material_space::MD)
-            .align(Start)
-            .justify(Start),
-        );
+    let lyrics_panel = lyrics_panel(
+        &lyrics,
+        &lyrics_source,
+        loading_lyrics,
+        player.position,
+        theme,
+    );
 
     Rectangle::new()
         .width(CONTENT_WIDTH)
@@ -470,7 +463,182 @@ fn format_duration(duration: Duration) -> String {
     format!("{}:{:02}", total / 60, total % 60)
 }
 
-fn fetch_track_extras(player: &str) -> (String, String) {
+struct LyricLine {
+    at: Option<Duration>,
+    text: String,
+}
+
+fn parse_lyrics(raw: &str) -> Vec<LyricLine> {
+    let mut lines = Vec::new();
+    for raw_line in raw.lines() {
+        let mut rest = raw_line.trim();
+        let mut timestamps = Vec::new();
+        while let Some(tag) = rest.strip_prefix('[') {
+            let Some((value, tail)) = tag.split_once(']') else {
+                break;
+            };
+            if let Some(timestamp) = parse_lyric_timestamp(value) {
+                timestamps.push(timestamp);
+                rest = tail.trim_start();
+            } else if value.contains(':') {
+                // Ignore LRC metadata tags such as [ar:], [ti:] and [offset:].
+                rest = tail.trim_start();
+            } else {
+                break;
+            }
+        }
+
+        let text = rest.trim();
+        if text.is_empty() {
+            continue;
+        }
+        if timestamps.is_empty() {
+            lines.push(LyricLine {
+                at: None,
+                text: text.to_owned(),
+            });
+        } else {
+            lines.extend(timestamps.into_iter().map(|at| LyricLine {
+                at: Some(at),
+                text: text.to_owned(),
+            }));
+        }
+    }
+    lines.sort_by_key(|line| line.at);
+    lines
+}
+
+fn parse_lyric_timestamp(value: &str) -> Option<Duration> {
+    let (minutes, seconds) = value.split_once(':')?;
+    let minutes = minutes.parse::<u64>().ok()?;
+    let seconds = seconds.parse::<f64>().ok()?;
+    if !seconds.is_finite() || !(0.0..60.0).contains(&seconds) {
+        return None;
+    }
+    let millis = minutes
+        .saturating_mul(60_000)
+        .saturating_add((seconds * 1_000.0).round() as u64);
+    Some(Duration::from_millis(millis))
+}
+
+fn lyrics_panel(
+    raw: &str,
+    source: &str,
+    loading: bool,
+    position: Duration,
+    theme: ThemeColors,
+) -> Rectangle {
+    let lines = parse_lyrics(raw);
+    let content: Box<dyn Widget> = if raw.trim().is_empty() {
+        let message = if loading {
+            "Procurando letras da faixa…"
+        } else {
+            "Nenhuma letra encontrada para esta faixa."
+        };
+        Box::new(
+            Column::new(vec![
+                Box::new(material_icon(
+                    if loading {
+                        material::icon::LYRICS
+                    } else {
+                        material::icon::MUSIC_OFF
+                    },
+                    30.0,
+                    theme.muted,
+                )),
+                Box::new(Text::new(message).size(13.0).color(theme.muted).wrap()),
+            ])
+            .width(Parent)
+            .height(300.0)
+            .gap(material_space::MD)
+            .align(Center)
+            .justify(Center),
+        )
+    } else if lines.iter().any(|line| line.at.is_some()) {
+        let active_index = lines
+            .iter()
+            .rposition(|line| line.at.is_some_and(|at| at <= position))
+            .unwrap_or(0);
+        let start = active_index.saturating_sub(2);
+        let end = (active_index + 4).min(lines.len());
+        let visible = lines[start..end]
+            .iter()
+            .enumerate()
+            .map(|(offset, line)| {
+                let active = start + offset == active_index;
+                Box::new(
+                    Text::new(line.text.clone())
+                        .size(if active { 16.0 } else { 13.0 })
+                        .color(if active { theme.accent } else { theme.muted })
+                        .wrap(),
+                ) as Box<dyn Widget>
+            })
+            .collect();
+        Box::new(
+            Column::new(visible)
+                .width(Parent)
+                .height(300.0)
+                .gap(material_space::MD)
+                .align(Start)
+                .justify(Center),
+        )
+    } else {
+        let text = lines
+            .iter()
+            .map(|line| line.text.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        Box::new(
+            ScrollArea::new(
+                "vshell-dashboard-media-lyrics",
+                Text::new(text).size(13.0).color(theme.text).wrap(),
+            )
+            .width(Parent)
+            .height(300.0),
+        )
+    };
+
+    Rectangle::new()
+        .width(LYRICS_WIDTH)
+        .height(CONTENT_HEIGHT)
+        .radius(material_shape::CARD)
+        .fill(theme.button_surface)
+        .padding(material_space::LG)
+        .child(
+            Column::new(vec![
+                Box::new(
+                    Row::new(vec![
+                        Box::new(material_icon(material::icon::LYRICS, 17.0, theme.accent)),
+                        Box::new(Text::new("LETRAS").size(12.0).color(theme.text)),
+                        Box::new(
+                            Text::new(source.to_owned())
+                                .size(9.0)
+                                .color(theme.muted)
+                                .elide(),
+                        ),
+                    ])
+                    .width(Parent)
+                    .height(22.0)
+                    .gap(material_space::SM)
+                    .align(Center)
+                    .justify(amane::SpaceBetween),
+                ),
+                content,
+            ])
+            .width(Parent)
+            .height(Parent)
+            .gap(material_space::MD)
+            .align(Start)
+            .justify(Start),
+        )
+}
+
+fn fetch_track_extras(
+    player: &str,
+    title: &str,
+    artist: &str,
+    duration: Duration,
+) -> (String, String, String) {
     let arguments = [Argument::from("org.mpris.MediaPlayer2.Player")];
     let properties = Bus::session().call(
         player,
@@ -480,10 +648,218 @@ fn fetch_track_extras(player: &str) -> (String, String) {
         &arguments,
     );
     let metadata = properties.get("Metadata");
-    (
-        metadata.get("xesam:album").text().to_owned(),
-        metadata.get("xesam:asText").text().to_owned(),
-    )
+    let album = metadata.get("xesam:album").text().to_owned();
+    let mpris_lyrics = metadata.get("xesam:asText").text().trim().to_owned();
+    if !mpris_lyrics.is_empty() {
+        return (album, mpris_lyrics, "MPRIS".to_owned());
+    }
+
+    let track_url = metadata.get("xesam:url").text().to_owned();
+    if let Some(lyrics) = local_lyrics(&track_url, artist, title) {
+        return (album, lyrics, "ARQUIVO LOCAL".to_owned());
+    }
+    if let Some(lyrics) = fetch_lrclib_lyrics(artist, title, &album, duration) {
+        return (album, lyrics, "LRCLIB".to_owned());
+    }
+    if let Some(lyrics) = fetch_netease_lyrics(artist, title) {
+        return (album, lyrics, "NETEASE".to_owned());
+    }
+
+    (album, String::new(), String::new())
+}
+
+fn lyrics_key(title: &str, artist: &str) -> String {
+    format!("{}\n{}", artist.trim(), title.trim())
+}
+
+fn curl_json(
+    url: &str,
+    query: &[(&str, String)],
+    headers: &[(&str, &str)],
+) -> Option<serde_json::Value> {
+    let mut command = Command::new("curl");
+    command.args([
+        "--fail",
+        "--location",
+        "--silent",
+        "--show-error",
+        "--max-time",
+        "6",
+        "--max-filesize",
+        "1048576",
+        "--get",
+        url,
+    ]);
+    for (name, value) in headers {
+        command.arg("--header").arg(format!("{name}: {value}"));
+    }
+    for (name, value) in query {
+        command
+            .arg("--data-urlencode")
+            .arg(format!("{name}={value}"));
+    }
+
+    let output = command.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    serde_json::from_slice(&output.stdout).ok()
+}
+
+fn fetch_lrclib_lyrics(
+    artist: &str,
+    title: &str,
+    album: &str,
+    duration: Duration,
+) -> Option<String> {
+    if artist.trim().is_empty() || title.trim().is_empty() {
+        return None;
+    }
+    let mut query = vec![
+        ("track_name", title.to_owned()),
+        ("artist_name", artist.to_owned()),
+    ];
+    if !album.trim().is_empty() {
+        query.push(("album_name", album.to_owned()));
+    }
+    if !duration.is_zero() {
+        query.push(("duration", duration.as_secs().to_string()));
+    }
+    let response = curl_json(
+        "https://lrclib.net/api/get",
+        &query,
+        &[(
+            "User-Agent",
+            "V-Shell (https://github.com/GustavoCarmo11/V-Shell)",
+        )],
+    )?;
+    response
+        .get("syncedLyrics")
+        .and_then(serde_json::Value::as_str)
+        .filter(|lyrics| !lyrics.trim().is_empty())
+        .or_else(|| {
+            response
+                .get("plainLyrics")
+                .and_then(serde_json::Value::as_str)
+                .filter(|lyrics| !lyrics.trim().is_empty())
+        })
+        .map(str::to_owned)
+}
+
+fn fetch_netease_lyrics(artist: &str, title: &str) -> Option<String> {
+    if artist.trim().is_empty() || title.trim().is_empty() {
+        return None;
+    }
+    let headers = [
+        (
+            "User-Agent",
+            "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0",
+        ),
+        ("Referer", "https://music.163.com/"),
+    ];
+    let search = curl_json(
+        "https://music.163.com/api/search/get",
+        &[
+            ("s", format!("{title} {artist}")),
+            ("type", "1".to_owned()),
+            ("limit", "5".to_owned()),
+        ],
+        &headers,
+    )?;
+    let songs = search.get("result")?.get("songs")?.as_array()?;
+    let normalized_title = normalize_track_text(title);
+    let normalized_artist = normalize_track_text(artist);
+    let song = songs.iter().find(|song| {
+        let candidate_title = song
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .map(normalize_track_text)
+            .unwrap_or_default();
+        if candidate_title != normalized_title {
+            return false;
+        }
+        song.get("artists")
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|artists| {
+                artists.iter().any(|candidate| {
+                    candidate
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .map(normalize_track_text)
+                        .is_some_and(|candidate_artist| {
+                            candidate_artist == normalized_artist
+                                || candidate_artist.contains(&normalized_artist)
+                                || normalized_artist.contains(&candidate_artist)
+                        })
+                })
+            })
+    })?;
+    let id = song.get("id")?.as_i64()?.to_string();
+    let response = curl_json(
+        "https://music.163.com/api/song/lyric",
+        &[
+            ("id", id),
+            ("lv", "1".to_owned()),
+            ("kv", "1".to_owned()),
+            ("tv", "-1".to_owned()),
+        ],
+        &headers,
+    )?;
+    response
+        .get("lrc")?
+        .get("lyric")?
+        .as_str()
+        .filter(|lyrics| !lyrics.trim().is_empty())
+        .map(str::to_owned)
+}
+
+fn normalize_track_text(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| character.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn local_lyrics(track_url: &str, artist: &str, title: &str) -> Option<String> {
+    let mut candidates = Vec::new();
+    if let Some(path) = track_url.strip_prefix("file://") {
+        let path = path.strip_prefix("localhost").unwrap_or(path);
+        let path = PathBuf::from(percent_decode(path));
+        if path.is_file() {
+            candidates.push(path.with_extension("lrc"));
+        }
+    }
+
+    if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
+        let directory = home.join("Music").join("lyrics");
+        let artist = safe_filename_part(artist);
+        let title = safe_filename_part(title);
+        candidates.push(directory.join(format!("{artist} - {title}.lrc")));
+        candidates.push(directory.join(artist).join(format!("{title}.lrc")));
+    }
+
+    candidates.into_iter().find_map(|path| {
+        let metadata = fs::metadata(&path).ok()?;
+        if metadata.len() > 512 * 1024 {
+            return None;
+        }
+        let lyrics = fs::read_to_string(path).ok()?;
+        (!lyrics.trim().is_empty()).then_some(lyrics)
+    })
+}
+
+fn safe_filename_part(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if matches!(character, '/' | '\\' | '\0') {
+                '_'
+            } else {
+                character
+            }
+        })
+        .collect()
 }
 
 fn resolve_artwork(source: &str) -> Option<PathBuf> {

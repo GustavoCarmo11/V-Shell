@@ -2,7 +2,7 @@
 
 ## Project Overview and Technologies
 
-V-Shell is a Caelestia-inspired Rust Wayland shell built with Amane, Vello/WGPU and GLSL; it integrates with Hyprland IPC. Amane supplies desktop, media, D-Bus and audio services. `color-worker/` uses `image` and `material-color-utils` for wallpaper palettes. `cava` optionally visualizes audio; `curl` fetches remote artwork.
+V-Shell is a Caelestia-inspired Rust Wayland shell built with Amane, Vello/WGPU and GLSL; it integrates with Hyprland IPC. Amane supplies desktop, media, D-Bus and audio services. `color-worker/` uses `image` and `material-color-utils` for wallpaper palettes. `cava` optionally visualizes audio; `curl` fetches remote artwork and lyrics. Lyrics can come from MPRIS, local LRC files, LRCLIB or NetEase.
 
 ## Structure and Architecture
 
@@ -28,11 +28,11 @@ After Amane generates the root manifest, run `cargo fmt`, `cargo fmt --check`, o
 
 ## Code Style and Naming
 
-Follow `rustfmt` defaults. Use `snake_case` for functions, modules and files; `UpperCamelCase` for types and traits; and `UPPER_SNAKE_CASE` for constants. Keep changes within the relevant module and reuse shared motion, theme and Material tokens where applicable.
+Follow `rustfmt` defaults. Use `snake_case` for functions, modules and files; `UpperCamelCase` for types and traits; and `UPPER_SNAKE_CASE` for constants. Base UI components on Material Design 3: use shared color roles, shape, spacing, typography and icon tokens from `src/material.rs` instead of introducing arbitrary values. Keep changes within the relevant module and reuse shared motion and theme behavior where applicable.
 
 ## Security and Change Practices
 
-Pass external values as `Command` arguments and set timeouts. Validate wallpaper paths and MPRIS URLs; cap downloads. Do not commit secrets or generated manifests, and preserve XDG paths and user data.
+Pass external values as `Command` arguments and set timeouts. Validate wallpaper paths and MPRIS URLs; cap downloads. Online lyric lookup sends track title, artist and album metadata to the selected service. Do not commit secrets or generated manifests, and preserve XDG paths and user data.
 
 Tests use Rust's built-in `#[test]` framework. Add focused tests beside the logic, particularly for motion math, parsers and state transitions. Existing tests cover motion; the worker has no dedicated tests. No coverage threshold is defined.
 
